@@ -26,10 +26,16 @@ create table if not exists public.library_documents (
   last_opened timestamptz
 );
 
+alter table public.library_documents
+  add column if not exists content_sha256 text;
+
 create index if not exists library_documents_owner_added
   on public.library_documents (owner_id, added_at desc);
 create index if not exists library_documents_owner_folder
   on public.library_documents (owner_id, folder_id);
+create unique index if not exists library_documents_owner_content_sha256
+  on public.library_documents (owner_id, content_sha256)
+  where content_sha256 is not null;
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.library_folders to authenticated;

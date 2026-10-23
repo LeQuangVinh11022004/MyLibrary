@@ -2,7 +2,7 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f7f6f2" />
     <meta
       name="description"
@@ -167,7 +167,7 @@
               <h3 id="emptyTitle">Bắt đầu bộ sưu tập của bạn</h3>
               <p id="emptyDescription">Thêm sách, PDF, ghi chú hoặc tài liệu học tập để mọi thứ luôn gọn gàng trong tầm tay.</p>
               <button id="emptyUpload" class="primary-button" type="button"><span aria-hidden="true">＋</span> Tải tài liệu đầu tiên</button>
-              <span class="supported-types">PDF, EPUB, DOCX, PPTX, hình ảnh và nhiều hơn nữa</span>
+              <span class="supported-types">PDF, EPUB, AZW3, DOCX, PPTX, hình ảnh và nhiều hơn nữa</span>
             </div>
           </section>
           <footer class="page-footer"><span>Được tạo cho những ngày muốn học thêm một chút.</span><span><i></i> Lưu riêng tư trên Supabase</span></footer>
@@ -230,10 +230,17 @@
         <p class="eyebrow" id="previewType"></p>
         <h2 id="previewName"></h2>
         <p class="modal-description" id="previewDetails"></p>
-        <div id="epubControls" class="epub-controls" hidden>
-          <button type="button" class="secondary-button" id="epubPrevious" aria-label="Trang trước">← Trước</button>
-          <span id="epubLocation">Đang mở sách…</span>
-          <button type="button" class="secondary-button" id="epubNext" aria-label="Trang tiếp theo">Tiếp →</button>
+        <div id="readerControls" class="reader-controls" hidden>
+          <div class="reader-pagination">
+            <button type="button" class="secondary-button" id="readerPrevious" aria-label="Trang hoặc chương trước">← Trước</button>
+            <span id="readerLocation" aria-live="polite">Đang mở sách…</span>
+            <button type="button" class="secondary-button" id="readerNext" aria-label="Trang hoặc chương tiếp theo">Tiếp →</button>
+          </div>
+          <div class="reader-preferences" role="group" aria-label="Tùy chỉnh trình đọc">
+            <button type="button" class="secondary-button" id="readerFontDown" aria-label="Giảm cỡ chữ" title="Giảm cỡ chữ">A−</button>
+            <button type="button" class="secondary-button" id="readerFontUp" aria-label="Tăng cỡ chữ" title="Tăng cỡ chữ">A+</button>
+            <button type="button" class="secondary-button" id="readerTheme" aria-label="Đổi màu nền" title="Đổi màu nền">Nền: sáng</button>
+          </div>
         </div>
         <div id="previewContent" class="preview-content"></div>
         <div class="modal-actions">

@@ -1,6 +1,15 @@
 const BUCKET = "library-files";
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const READER_CACHE_NAME = "mylibrary-reader-cache";
+const READER_CACHE_STORE = "books";
+const READER_CACHE_LIMIT = 200 * 1024 * 1024;
 const SAVED_ACCESS_CODE_KEY = "trang-sach-saved-access-code";
+const MOBI_PARSER_URL = "https://cdn.jsdelivr.net/npm/@lingo-reader/mobi-parser@0.4.6/+esm";
+const READER_THEMES = {
+  light: { label: "Nền: sáng", background: "#fffefa", color: "#282d27" },
+  sepia: { label: "Nền: sepia", background: "#f2e8d5", color: "#463a2e" },
+  dark: { label: "Nền: tối", background: "#20241f", color: "#eee9df" },
+};
 
 const state = {
   supabase: null,
@@ -16,6 +25,15 @@ const state = {
   previewUrl: null,
   rendition: null,
   book: null,
+  azw3Book: null,
+  azw3Spine: [],
+  azw3ChapterIndex: 0,
+  azw3PageIndex: 0,
+  azw3PageCount: 1,
+  currentReaderName: "",
+  readerFontSize: 18,
+  readerTheme: "light",
+  readerRequestId: 0,
   authMode: "signin",
   createdAccessCode: null,
 };
@@ -239,6 +257,14 @@ function contentType(file) {
   return "application/octet-stream";
 }
 
+async function sha256File(file) {
+  if (!window.crypto?.subtle) {
+    throw new Error("Trình duyệt cần HTTPS để kiểm tra tệp trùng lặp.");
+  }
+  const digest = await window.crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 async function ensureFolder(name, parentId) {
   const existing = state.folders.find((folder) => folder.parentId === parentId
     && folder.name.toLocaleLowerCase("vi") === name.toLocaleLowerCase("vi"));
@@ -253,6 +279,15 @@ async function ensureFolder(name, parentId) {
 }
 
 async function uploadOneFile(file, folderId, relativePath) {
+  const contentSha256 = await sha256File(file);
+  const { data: duplicate, error: duplicateError } = await state.supabase.from("library_documents")
+    .select("id")
+    .eq("owner_id", state.user.id)
+    .eq("content_sha256", contentSha256)
+    .maybeSingle();
+  if (duplicateError) throw duplicateError;
+  if (duplicate) return false;
+
   const id = crypto.randomUUID();
   const storagePath = `${state.user.id}/${id}${fileExtension(file.name)}`;
   const type = contentType(file);
@@ -269,17 +304,25 @@ async function uploadOneFile(file, folderId, relativePath) {
     content_type: type,
     size_bytes: file.size,
     relative_path: relativePath,
+    content_sha256: contentSha256,
   }).select("*").single();
   if (error) {
     const { error: cleanupError } = await state.supabase.storage.from(BUCKET).remove([storagePath]);
-    if (cleanupError) console.error("Không thể dọn tệp tải lên dở dang.", cleanupError);
+    if (cleanupError) {
+      console.error("Không thể dọn tệp tải lên dở dang.", cleanupError);
+      throw new Error(`${error.message} Không thể dọn tệp trùng vừa tải lên: ${cleanupError.message}`);
+    }
+    if (error.code === "23505") return false;
     throw error;
   }
-  return mapDocument(data);
+  return true;
 }
 
 function uploadErrorMessage(error) {
   const message = error?.message || "Lỗi không xác định.";
+  if (/could not find.*content_sha256|column.*content_sha256.*does not exist/i.test(message)) {
+    return "Thiếu cột kiểm tra tệp trùng. Chạy lại supabase-schema.sql trong Supabase SQL Editor.";
+  }
   if (/bucket not found|nosuchbucket/i.test(message)) {
     return "Bucket library-files chưa được tạo. Chạy supabase-schema.sql trong Supabase SQL Editor.";
   }
@@ -299,6 +342,7 @@ async function handleFiles(fileList, isFolderUpload = false) {
   const accepted = files.filter((file) => file.size <= MAX_FILE_SIZE);
   const tooLarge = files.length - accepted.length;
   let uploaded = 0;
+  let duplicates = 0;
   const failures = [];
   const folderCache = new Map();
 
@@ -315,8 +359,8 @@ async function handleFiles(fileList, isFolderUpload = false) {
         folderId = folderCache.get(cacheKey);
       }
       try {
-        await uploadOneFile(file, folderId, relativePath);
-        uploaded += 1;
+        if (await uploadOneFile(file, folderId, relativePath)) uploaded += 1;
+        else duplicates += 1;
       } catch (error) {
         console.error(`Không thể tải lên ${file.name}.`, error);
         failures.push({ name: file.name, message: uploadErrorMessage(error) });
@@ -325,6 +369,7 @@ async function handleFiles(fileList, isFolderUpload = false) {
     await reloadData();
     const messages = [];
     if (uploaded) messages.push(`Đã tải ${uploaded} tệp lên Supabase.`);
+    if (duplicates) messages.push(`Đã bỏ qua ${duplicates} tệp trùng nội dung.`);
     if (tooLarge) messages.push(`${tooLarge} tệp vượt quá giới hạn 50 MB.`);
     if (failures.length) {
       const firstFailure = failures[0];
@@ -394,14 +439,311 @@ async function createFolder(name) {
 }
 
 function cleanupPreview() {
+  state.readerRequestId += 1;
   if (state.rendition) state.rendition.destroy();
   if (state.book) state.book.destroy();
+  if (state.azw3Book) state.azw3Book.destroy();
   if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
   state.rendition = null;
   state.book = null;
+  state.azw3Book = null;
+  state.azw3Spine = [];
+  state.azw3ChapterIndex = 0;
+  state.azw3PageIndex = 0;
+  state.azw3PageCount = 1;
+  state.currentReaderName = "";
   state.previewUrl = null;
   byId("previewContent").replaceChildren();
-  byId("epubControls").hidden = true;
+  byId("readerControls").hidden = true;
+  byId("readerPrevious").disabled = false;
+  byId("readerNext").disabled = false;
+}
+
+function azw3ReaderStyles() {
+  const theme = READER_THEMES[state.readerTheme];
+  return `html{height:100%;overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;scrollbar-width:none;background:${theme.background}!important;color:${theme.color}!important}body{box-sizing:border-box;height:100%;margin:0;padding:clamp(20px,5vw,48px);column-width:calc(100vw - clamp(20px,5vw,48px) - clamp(20px,5vw,48px));column-gap:clamp(40px,10vw,96px);column-fill:auto;font:${state.readerFontSize}px/1.8 Georgia,"Times New Roman",serif;overflow-wrap:anywhere;background:${theme.background}!important;color:${theme.color}!important}img,svg,video{max-width:100%;height:auto;break-inside:avoid}table{max-width:100%;overflow-x:auto;break-inside:avoid}h1,h2,h3,h4,blockquote,figure{break-inside:avoid}p{orphans:3;widows:3}`;
+}
+
+function updateAzw3Frame(frame) {
+  const style = frame.contentDocument?.getElementById("readerOverrides");
+  if (style) style.textContent = azw3ReaderStyles();
+}
+
+function updateAzw3Pagination(frame, openLastPage = false) {
+  const frameDocument = frame.contentDocument;
+  if (!frameDocument) return;
+  const root = frameDocument.documentElement;
+  const viewportWidth = frame.clientWidth || root.clientWidth;
+  if (!viewportWidth) return;
+  const columns = frame.contentWindow.getComputedStyle(frameDocument.body);
+  const pageStride = Number.parseFloat(columns.columnWidth) + Number.parseFloat(columns.columnGap);
+  const contentWidth = Math.max(root.scrollWidth, frameDocument.body?.scrollWidth || 0);
+  state.azw3PageCount = Math.max(1, Math.ceil(contentWidth / (Number.isFinite(pageStride) ? pageStride : viewportWidth)));
+  state.azw3PageIndex = openLastPage
+    ? state.azw3PageCount - 1
+    : Math.min(state.azw3PageIndex, state.azw3PageCount - 1);
+  root.scrollLeft = state.azw3PageIndex * (Number.isFinite(pageStride) ? pageStride : viewportWidth);
+  byId("readerLocation").textContent =
+    `Chương ${state.azw3ChapterIndex + 1} / ${state.azw3Spine.length} · Trang ${state.azw3PageIndex + 1} / ${state.azw3PageCount}`;
+  byId("readerPrevious").disabled = state.azw3ChapterIndex === 0 && state.azw3PageIndex === 0;
+  byId("readerNext").disabled =
+    state.azw3ChapterIndex >= state.azw3Spine.length - 1
+    && state.azw3PageIndex >= state.azw3PageCount - 1;
+}
+
+function sanitizeAzw3ChapterHtml(html) {
+  const parsed = new window.DOMParser().parseFromString(html, "text/html");
+  parsed.querySelectorAll("base, embed, form, frame, iframe, link, meta, object, script").forEach((element) => element.remove());
+  parsed.querySelectorAll("*").forEach((element) => {
+    for (const attribute of [...element.attributes]) {
+      const name = attribute.name.toLowerCase();
+      if (name.startsWith("on") || ["action", "formaction", "ping", "srcdoc", "target"].includes(name)) {
+        element.removeAttribute(attribute.name);
+      } else if (name === "href" && !attribute.value.startsWith("#")) {
+        element.removeAttribute(attribute.name);
+      } else if (["src", "poster"].includes(name)
+          && !/^(?:blob:|data:)/i.test(attribute.value)) {
+        element.removeAttribute(attribute.name);
+      }
+    }
+  });
+  return parsed.body.innerHTML;
+}
+
+function renderAzw3Chapter(openLastPage = false) {
+  const book = state.azw3Book;
+  const chapterInfo = state.azw3Spine[state.azw3ChapterIndex];
+  if (!book || !chapterInfo) return;
+
+  const chapter = book.loadChapter(chapterInfo.id);
+  if (!chapter) throw new Error("Không tìm thấy nội dung chương AZW3 này.");
+  const stylesheetLinks = (chapter.css || []).map(({ href }) => {
+    const url = new URL(href, window.location.href);
+    return url.protocol === "blob:"
+      ? `<link rel="stylesheet" href="${escapeHtml(url.href)}">`
+      : "";
+  }).join("");
+  const frame = window.document.createElement("iframe");
+  frame.className = "azw3-reader-frame";
+  frame.setAttribute("sandbox", "allow-same-origin");
+  frame.referrerPolicy = "no-referrer";
+  frame.title = `${state.currentReaderName} — chương ${state.azw3ChapterIndex + 1}`;
+  const safeChapterHtml = sanitizeAzw3ChapterHtml(chapter.html);
+  frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; connect-src 'none'; img-src blob: data:; media-src blob: data:; style-src 'unsafe-inline' blob: data:; font-src blob: data:; object-src 'none'; script-src 'none';">${stylesheetLinks}<style id="readerOverrides">${azw3ReaderStyles()}</style></head><body>${safeChapterHtml}</body></html>`;
+  frame.addEventListener("load", () => {
+    updateAzw3Frame(frame);
+    const frameDocument = frame.contentDocument;
+    if (!frameDocument) return;
+    updateAzw3Pagination(frame, openLastPage);
+    frame.contentWindow.addEventListener("resize", () => updateAzw3Pagination(frame));
+    let touchStart = null;
+    frameDocument.addEventListener("touchstart", (event) => {
+      const touch = event.changedTouches[0];
+      touchStart = { x: touch.clientX, y: touch.clientY };
+    }, { passive: true });
+    frameDocument.addEventListener("touchend", (event) => {
+      if (!touchStart) return;
+      const touch = event.changedTouches[0];
+      const deltaX = touch.clientX - touchStart.x;
+      const deltaY = touch.clientY - touchStart.y;
+      touchStart = null;
+      if (Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.25) {
+        moveReader(deltaX < 0 ? 1 : -1);
+      }
+    }, { passive: true });
+    frameDocument.addEventListener("touchcancel", () => { touchStart = null; }, { passive: true });
+  }, { once: true });
+  byId("previewContent").replaceChildren(frame);
+  byId("readerLocation").textContent = `Chương ${state.azw3ChapterIndex + 1} / ${state.azw3Spine.length}`;
+}
+
+async function openAzw3Reader(blob, document, dialog, requestId) {
+  const parser = await import(MOBI_PARSER_URL);
+  if (state.readerRequestId !== requestId || !dialog.open) return;
+  if (typeof parser.initKf8File !== "function") {
+    throw new Error("Không tải được trình đọc AZW3.");
+  }
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  if (state.readerRequestId !== requestId || !dialog.open) return;
+  const book = await parser.initKf8File(bytes);
+  if (state.readerRequestId !== requestId || !dialog.open) {
+    book.destroy();
+    return;
+  }
+  state.azw3Book = book;
+  state.azw3Spine = book.getSpine();
+  state.azw3ChapterIndex = 0;
+  state.azw3PageIndex = 0;
+  state.currentReaderName = document.name;
+  if (!state.azw3Spine.length) throw new Error("Sách AZW3 không có nội dung để đọc.");
+  byId("readerControls").hidden = false;
+  applyReaderSettings();
+  renderAzw3Chapter();
+}
+
+function applyReaderSettings() {
+  const theme = READER_THEMES[state.readerTheme];
+  byId("readerTheme").textContent = theme.label;
+  byId("readerFontDown").disabled = state.readerFontSize <= 14;
+  byId("readerFontUp").disabled = state.readerFontSize >= 30;
+  if (state.rendition) {
+    state.rendition.themes.fontSize(`${state.readerFontSize}px`);
+    state.rendition.themes.select(`reader-${state.readerTheme}`);
+  }
+  const frame = byId("previewContent").querySelector(".azw3-reader-frame");
+  if (frame) {
+    updateAzw3Frame(frame);
+    updateAzw3Pagination(frame);
+  }
+}
+
+function moveReader(direction) {
+  if (state.azw3Book) {
+    const frame = byId("previewContent").querySelector(".azw3-reader-frame");
+    const nextPageIndex = state.azw3PageIndex + direction;
+    if (nextPageIndex >= 0 && nextPageIndex < state.azw3PageCount) {
+      state.azw3PageIndex = nextPageIndex;
+      if (frame) updateAzw3Pagination(frame);
+      return;
+    }
+    const nextChapterIndex = state.azw3ChapterIndex + direction;
+    if (nextChapterIndex < 0 || nextChapterIndex >= state.azw3Spine.length) return;
+    state.azw3ChapterIndex = nextChapterIndex;
+    state.azw3PageIndex = 0;
+    try {
+      renderAzw3Chapter(direction < 0);
+    } catch (error) {
+      console.error("Không thể mở chương AZW3.", error);
+      showToast(`Không thể mở chương: ${error.message || "lỗi đọc sách."}`);
+    }
+    return;
+  }
+  if (!state.rendition) return;
+  const movement = direction < 0 ? state.rendition.prev() : state.rendition.next();
+  movement?.catch((error) => {
+    console.error("Không thể chuyển trang sách.", error);
+    showToast(`Không thể chuyển trang: ${error.message || "lỗi đọc sách."}`);
+  });
+}
+
+function openReaderCache() {
+  if (!window.indexedDB) return Promise.reject(new Error("Trình duyệt không hỗ trợ bộ nhớ đệm sách."));
+  return new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(READER_CACHE_NAME, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(READER_CACHE_STORE)) {
+        request.result.createObjectStore(READER_CACHE_STORE, { keyPath: "key" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Không thể mở bộ nhớ đệm sách."));
+  });
+}
+
+function runReaderCacheTransaction(mode, action) {
+  return openReaderCache().then((db) => new Promise((resolve, reject) => {
+    let result = null;
+    const transaction = db.transaction(READER_CACHE_STORE, mode);
+    const store = transaction.objectStore(READER_CACHE_STORE);
+    transaction.oncomplete = () => {
+      db.close();
+      resolve(result);
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error || new Error("Không thể truy cập bộ nhớ đệm sách."));
+    };
+    transaction.onabort = () => {
+      db.close();
+      reject(transaction.error || new Error("Không thể cập nhật bộ nhớ đệm sách."));
+    };
+    try {
+      action(store, (value) => { result = value; });
+    } catch (error) {
+      transaction.abort();
+      db.close();
+      reject(error);
+    }
+  }));
+}
+
+function readerCacheKey(document) {
+  return `${state.user.id}:${document.id}`;
+}
+
+function getCachedReaderBlob(document) {
+  const key = readerCacheKey(document);
+  return runReaderCacheTransaction("readwrite", (store, setResult) => {
+    const request = store.get(key);
+    request.onsuccess = () => {
+      const entry = request.result;
+      if (!entry) return;
+      if (entry.storagePath === document.storagePath && entry.size === document.size && entry.blob instanceof Blob) {
+        setResult(entry.blob);
+        store.put({ ...entry, lastAccessed: Date.now() });
+      } else {
+        store.delete(key);
+      }
+    };
+  });
+}
+
+function cacheReaderBlob(document, blob) {
+  if (blob.size > READER_CACHE_LIMIT) return Promise.resolve(false);
+  const key = readerCacheKey(document);
+  return runReaderCacheTransaction("readwrite", (store, setResult) => {
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const entries = request.result.filter((entry) => entry.key !== key);
+      let totalSize = entries.reduce((total, entry) => total + entry.size, 0);
+      entries.sort((a, b) => a.lastAccessed - b.lastAccessed);
+      for (const entry of entries) {
+        if (totalSize + blob.size <= READER_CACHE_LIMIT) break;
+        store.delete(entry.key);
+        totalSize -= entry.size;
+      }
+      const canCache = totalSize + blob.size <= READER_CACHE_LIMIT;
+      setResult(canCache);
+      if (canCache) {
+        store.put({
+          key,
+          storagePath: document.storagePath,
+          size: blob.size,
+          blob,
+          lastAccessed: Date.now(),
+        });
+      }
+    };
+  });
+}
+
+function deleteCachedReaderBlob(document) {
+  return runReaderCacheTransaction("readwrite", (store) => {
+    store.delete(readerCacheKey(document));
+  });
+}
+
+async function loadReaderBlob(document, requestId, dialog) {
+  let blob = null;
+  try {
+    blob = await getCachedReaderBlob(document);
+  } catch (error) {
+    console.warn("Không thể đọc bộ nhớ đệm sách; sẽ tải từ Supabase.", error);
+  }
+  if (state.readerRequestId !== requestId || !dialog.open) return null;
+  if (blob) return blob;
+
+  const { data, error } = await state.supabase.storage.from(BUCKET).download(document.storagePath);
+  if (error) throw error;
+  if (state.readerRequestId !== requestId || !dialog.open) return null;
+  try {
+    const cached = await cacheReaderBlob(document, data);
+    if (!cached) showToast("Đã tải sách, nhưng bộ nhớ đệm trên thiết bị đã đầy.");
+  } catch (cacheError) {
+    console.error("Không thể lưu sách vào bộ nhớ đệm trên thiết bị.", cacheError);
+    showToast("Đã tải sách nhưng trình duyệt không thể lưu bộ nhớ đệm.");
+  }
+  return data;
 }
 
 async function openFile(document) {
@@ -410,8 +752,10 @@ async function openFile(document) {
     return;
   }
   cleanupPreview();
+  const requestId = state.readerRequestId;
   const dialog = byId("documentDialog");
   const kind = fileKind(document);
+  state.currentReaderName = document.name;
   byId("previewName").textContent = document.name;
   byId("previewType").textContent = `${kind.badge} · ${formatFileSize(document.size)}`;
   byId("previewDetails").textContent = `Đã thêm ${formatDate(document.addedAt)}${getFolder(document.folderId) ? ` · ${folderPath(getFolder(document.folderId))}` : ""}`;
@@ -424,9 +768,15 @@ async function openFile(document) {
   dialog.showModal();
 
   try {
-    const { data: blob, error } = await state.supabase.storage.from(BUCKET).download(document.storagePath);
-    if (error) throw error;
-    if (!dialog.open) return;
+    const isBook = /\.(?:epub|azw3)$/i.test(document.name);
+    const blob = isBook
+      ? await loadReaderBlob(document, requestId, dialog)
+      : await state.supabase.storage.from(BUCKET).download(document.storagePath).then(({ data, error }) => {
+        if (error) throw error;
+        return data;
+      });
+    if (state.readerRequestId !== requestId || !dialog.open) return;
+    if (!blob) return;
     const preview = byId("previewContent");
     preview.replaceChildren();
     if (kind.badge === "PDF") {
@@ -438,16 +788,32 @@ async function openFile(document) {
     } else if (/\.epub$/i.test(document.name)) {
       if (!window.ePub) throw new Error("Không tải được thư viện đọc EPUB. Hãy kiểm tra kết nối internet.");
       if (!window.JSZip) throw new Error("Thiếu thư viện giải nén EPUB (JSZip). Tải lại trang khi có kết nối internet.");
-      byId("epubControls").hidden = false;
       state.book = window.ePub();
-      await state.book.open(blob, "binary");
-      const readerHeight = window.innerWidth <= 600 ? "68vh" : "76vh";
+      await state.book.open(await blob.arrayBuffer(), "binary");
+      if (state.readerRequestId !== requestId || !dialog.open) return;
+      byId("readerControls").hidden = false;
+      const readerHeight = window.innerWidth <= 600 ? "68dvh" : "76vh";
       state.rendition = state.book.renderTo(preview, { width: "100%", height: readerHeight, flow: "paginated" });
+      for (const [name, theme] of Object.entries(READER_THEMES)) {
+        state.rendition.themes.register(
+          `reader-${name}`,
+          `body { background-color: ${theme.background} !important; color: ${theme.color} !important; }`,
+        );
+      }
+      applyReaderSettings();
       state.rendition.on("relocated", (location) => {
         const percentage = location.start?.percentage;
-        byId("epubLocation").textContent = Number.isFinite(percentage) ? `${Math.round(percentage * 100)}%` : "Đang đọc";
+        byId("readerLocation").textContent = Number.isFinite(percentage) ? `${Math.round(percentage * 100)}%` : "Đang đọc";
       });
       await state.rendition.display();
+    } else if (/\.azw3$/i.test(document.name)) {
+      await openAzw3Reader(blob, document, dialog, requestId);
+      if (state.readerRequestId !== requestId || !dialog.open) return;
+    } else if (/\.(?:azw|mobi)$/i.test(document.name)) {
+      const note = window.document.createElement("p");
+      note.className = "preview-unavailable";
+      note.textContent = "Trình đọc web hỗ trợ EPUB, PDF và AZW3 không DRM. AZW/MOBI chưa được hỗ trợ trực tiếp; file gốc vẫn có thể tải xuống để mở bằng ứng dụng tương thích.";
+      preview.append(note);
     } else if (blob.type.startsWith("image/")) {
       state.previewUrl = URL.createObjectURL(blob);
       const image = window.document.createElement("img");
@@ -457,6 +823,7 @@ async function openFile(document) {
     } else if (blob.type.startsWith("text/") || /\.(txt|md|csv|json|log)$/i.test(document.name)) {
       const pre = window.document.createElement("pre");
       pre.textContent = (await blob.text()).slice(0, 50000);
+      if (state.readerRequestId !== requestId || !dialog.open) return;
       preview.append(pre);
     } else {
       const note = window.document.createElement("p");
@@ -464,17 +831,27 @@ async function openFile(document) {
       note.textContent = "Có thể tải tệp xuống để mở bằng ứng dụng phù hợp.";
       preview.append(note);
     }
+    if (state.readerRequestId !== requestId || !dialog.open) return;
     document.lastOpened = Date.now();
     const { error: updateError } = await state.supabase.from("library_documents")
       .update({ last_opened: new Date(document.lastOpened).toISOString() }).eq("id", document.id);
     if (updateError) throw updateError;
     render();
   } catch (error) {
+    if (state.readerRequestId !== requestId || !dialog.open) return;
     console.error(`Không thể mở ${document.name}.`, error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const message = /\.azw3$/i.test(document.name)
+      ? `Không thể đọc AZW3. Chỉ hỗ trợ file không DRM; hãy kiểm tra kết nối và tính toàn vẹn của sách. Chi tiết: ${errorMessage}`
+      : `Không thể tải hoặc mở tài liệu: ${errorMessage}`;
+    cleanupPreview();
     if (dialog.open) {
-      byId("previewContent").innerHTML = '<p class="preview-unavailable">Không thể tải hoặc mở tài liệu. Hãy thử lại khi kết nối mạng ổn định.</p>';
+      const notice = window.document.createElement("p");
+      notice.className = "preview-unavailable";
+      notice.textContent = message;
+      byId("previewContent").replaceChildren(notice);
     }
-    showToast(`Không thể mở tài liệu: ${error.message || "lỗi kết nối."}`);
+    showToast(message || "Không thể mở tài liệu do lỗi kết nối.");
   }
 }
 
@@ -539,8 +916,17 @@ async function deleteDocument(id) {
     showToast(`Đã xóa tệp nhưng chưa xóa được thông tin: ${error.message}`);
     return;
   }
+  let cacheCleanupFailed = false;
+  try {
+    await deleteCachedReaderBlob(document);
+  } catch (cacheError) {
+    cacheCleanupFailed = true;
+    console.error("Không thể xóa bản lưu trên thiết bị.", cacheError);
+  }
   await reloadData();
-  showToast("Đã xóa tài liệu khỏi Supabase.");
+  showToast(cacheCleanupFailed
+    ? "Đã xóa tài liệu khỏi Supabase nhưng chưa xóa được bản lưu trên thiết bị."
+    : "Đã xóa tài liệu khỏi Supabase.");
 }
 
 function showAuthDialog() {
@@ -803,8 +1189,22 @@ byId("authDialog").addEventListener("cancel", (event) => {
   closeAuthDialog();
 });
 byId("documentDialog").addEventListener("close", cleanupPreview);
-byId("epubPrevious").addEventListener("click", () => state.rendition?.prev());
-byId("epubNext").addEventListener("click", () => state.rendition?.next());
+byId("readerPrevious").addEventListener("click", () => moveReader(-1));
+byId("readerNext").addEventListener("click", () => moveReader(1));
+byId("readerFontDown").addEventListener("click", () => {
+  state.readerFontSize = Math.max(14, state.readerFontSize - 2);
+  applyReaderSettings();
+});
+byId("readerFontUp").addEventListener("click", () => {
+  state.readerFontSize = Math.min(30, state.readerFontSize + 2);
+  applyReaderSettings();
+});
+byId("readerTheme").addEventListener("click", () => {
+  const themes = Object.keys(READER_THEMES);
+  const currentIndex = themes.indexOf(state.readerTheme);
+  state.readerTheme = themes[(currentIndex + 1) % themes.length];
+  applyReaderSettings();
+});
 window.document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => {
   const dialog = button.closest("dialog");
   if (dialog.id === "authDialog") closeAuthDialog();

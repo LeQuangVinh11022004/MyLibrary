@@ -172,7 +172,7 @@ h1 em { color: var(--green); font-weight: 500; }
 .modal { width: min(430px, calc(100% - 32px)); max-width: none; padding: 0; overflow: visible; border: 1px solid #eae8e0; border-radius: 11px; background: #fffefa; color: var(--ink); box-shadow: 0 20px 70px rgba(40,45,35,.18); }
 .modal::backdrop { background: rgba(36,40,33,.3); backdrop-filter: blur(2px); }
 .modal form, .info-modal-content, .document-modal-content { position: relative; padding: 31px; }
-.document-modal { width: min(1280px, calc(100vw - 32px)); max-height: calc(100dvh - 16px); overflow-y: auto; }
+.document-modal { width: min(1280px, calc(100vw - 32px)); max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; }
 .document-modal-content { padding: 28px clamp(18px, 3vw, 38px); }
 .auth-input { margin-bottom: 14px; }
 .form-error { margin: 10px 0 0; color: #ae5148; font-size: 10px; line-height: 1.55; }
@@ -192,9 +192,13 @@ h1 em { color: var(--green); font-weight: 500; }
 .saved-code-status { margin: 9px 0 0; color: #697d60; font-size: 9px; line-height: 1.5; }
 .copy-code-button { margin-top: 9px; }
 .created-code-panel > .primary-button { width: 100%; }
-.epub-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px; border: 1px solid #eae8e0; border-radius: 6px 6px 0 0; background: #fbfaf7; }
-.epub-controls[hidden] { display: none; }
-.epub-controls span { color: #777a71; font-size: 10px; }
+.reader-controls { display: grid; gap: 7px; padding: 8px; border: 1px solid #eae8e0; border-radius: 6px 6px 0 0; background: #fbfaf7; }
+.reader-controls[hidden] { display: none; }
+.reader-pagination, .reader-preferences { display: flex; align-items: center; gap: 8px; }
+.reader-pagination { justify-content: space-between; }
+.reader-pagination span { min-width: 56px; color: #777a71; font-size: 10px; text-align: center; }
+.reader-preferences { justify-content: flex-end; }
+.reader-preferences .secondary-button { min-width: 38px; }
 .modal-close { position: absolute; top: 13px; right: 15px; width: 29px; height: 29px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: #898b82; font-size: 21px; cursor: pointer; }
 .modal-close:hover { background: #f2f1eb; }
 .modal-icon { width: 36px; height: 36px; display: grid; place-items: center; margin-bottom: 19px; border-radius: 8px; background: #edf1e9; color: var(--green); font-size: 18px; }
@@ -209,11 +213,13 @@ h1 em { color: var(--green); font-weight: 500; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
 .secondary-button { min-height: 36px; padding: 0 13px; border: 1px solid #e8e6de; border-radius: 5px; background: #fffefa; color: #73766e; font-size: 10px; cursor: pointer; }
 .secondary-button:hover { background: #f7f6f2; }
+.secondary-button:disabled { opacity: .45; cursor: not-allowed; }
 .document-preview-icon { width: 40px; height: 48px; display: grid; place-items: center; margin-bottom: 17px; border-radius: 4px; background: #f2e8df; color: #ad725d; font-size: 10px; font-weight: 700; }
 .preview-content { min-height: 120px; max-height: 78vh; overflow: auto; margin: 14px 0; border-radius: 6px; background: #f6f5f0; }
-.epub-controls:not([hidden]) + .preview-content { margin-top: 0; border-radius: 0 0 6px 6px; }
+.reader-controls:not([hidden]) + .preview-content { margin-top: 0; border-radius: 0 0 6px 6px; }
 .preview-content:empty { display: none; }
 .preview-content iframe { width: 100%; height: 76vh; border: 0; }
+.preview-content iframe.azw3-reader-frame { overflow: hidden; }
 .preview-content > div { margin: auto; }
 .preview-content img { max-width: 100%; max-height: 45vh; display: block; margin: auto; object-fit: contain; }
 .preview-content pre { margin: 0; padding: 16px; color: #55594f; font: 11px/1.7 var(--sans); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -236,22 +242,30 @@ h1 em { color: var(--green); font-weight: 500; }
   .page-content { padding: 40px 28px 22px; }
 }
 @media (max-width: 600px) {
-  .document-modal { width: calc(100vw - 12px); max-height: calc(100dvh - 12px); }
+  .document-modal { width: calc(100vw - 12px); max-height: calc(100vh - 12px); max-height: calc(100dvh - 12px); }
   .document-modal-content { padding: 22px 14px; }
-  .preview-content { max-height: 70vh; }
-  .preview-content iframe { height: 68vh; }
-  .topbar { gap: 5px; padding: 0 15px; }
-  .breadcrumb { gap: 6px; font-size: 9px; }
-  .breadcrumb > span:first-child { display: none; }
-  .topbar-actions { gap: 8px; }
-  .search-box { width: 36px; height: 34px; justify-content: center; padding: 0; border: 0; background: transparent; }
+  .preview-content { max-height: 70vh; max-height: 70dvh; }
+  .preview-content iframe { height: 68vh; height: 68dvh; }
+  .topbar { position: relative; height: auto; min-height: 60px; gap: 4px; padding: max(8px, env(safe-area-inset-top, 0px)) 8px 8px; }
+  .menu-toggle { width: 44px; height: 44px; flex: 0 0 44px; margin-right: 0; }
+  .breadcrumb { min-width: 0; flex: 1; gap: 6px; margin-right: 0; overflow: hidden; font-size: 9px; }
+  .breadcrumb > span { display: none; }
+  .breadcrumb strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar-actions { flex: 0 0 auto; gap: 4px; }
+  .search-box { width: 44px; height: 44px; flex: 0 0 44px; justify-content: center; padding: 0; border: 0; background: transparent; }
   .search-box > span { font-size: 23px; }
   .search-box input { position: absolute; width: 1px; height: 1px; opacity: 0; }
   .search-box kbd { display: none; }
   .search-box.search-open { position: absolute; z-index: 3; inset: 8px 94px 8px 55px; width: auto; justify-content: flex-start; padding: 0 9px; border: 1px solid #e9e7e0; background: #fffefa; }
-  .search-box.search-open input { position: static; width: auto; height: auto; flex: 1; opacity: 1; }
-  .top-upload { padding: 0 10px; }
-  .auth-button { min-height: 32px; padding: 0 8px; }
+  .search-box.search-open input { position: static; width: auto; height: auto; flex: 1; opacity: 1; font-size: 16px; }
+  .top-upload { height: 44px; padding: 0 8px; white-space: nowrap; }
+  .auth-button { min-height: 44px; padding: 0 8px; white-space: nowrap; }
+  .reader-controls { gap: 6px; padding: 6px; }
+  .reader-pagination, .reader-preferences { gap: 5px; }
+  .reader-pagination .secondary-button, .reader-preferences .secondary-button { min-height: 44px; padding: 0 9px; }
+  .reader-pagination span { flex: 1; min-width: 48px; }
+  .preview-content iframe.azw3-reader-frame { height: 68vh; height: 68dvh; }
+  .text-input { min-height: 44px; font-size: 16px; }
   .page-content { padding: 34px 18px 20px; }
   .welcome-row { align-items: flex-start; }
   h1 { font-size: 32px; }
