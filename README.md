@@ -1,38 +1,72 @@
-# Trang sách
+# Trang Sách
 
-Thư viện cá nhân lưu file trên Supabase Storage riêng tư, đồng bộ tài liệu và thư mục theo tài khoản. Đọc PDF trong trình xem tích hợp và đọc EPUB ngay trên trang.
+Thư viện cá nhân để lưu sách và tài liệu lên Supabase, sắp xếp theo thư mục, tìm kiếm, đánh dấu yêu thích/đã đọc và mở PDF, EPUB hoặc AZW3 trong trình đọc riêng toàn màn hình.
 
-## Cấu hình Supabase miễn phí
+## Cấu trúc mã nguồn
 
-1. Tạo project Supabase trên gói Free và chờ project hoạt động.
-2. Mở **SQL Editor**, dán nội dung `supabase-schema.sql` rồi chạy. Lệnh này tạo bảng thư mục/tài liệu, chính sách Row Level Security (RLS) và private Storage bucket `library-files` với giới hạn 50 MB cho mỗi tệp.
-3. Trong **Project Settings → API**, sao chép **Project URL** và **anon/public key** (hoặc publishable key) vào `supabase-config.js`.
-4. Không đưa `service_role`/secret key vào mã website. URL và anon/publishable key được dùng ở trình duyệt; RLS và chính sách Storage trong schema giới hạn từng tài khoản chỉ xem, tải lên và xóa dữ liệu của chính mình.
-5. Trong **Authentication → Settings → User Signups**, bật **Allow new users to sign up** để tạo tài khoản. Nếu chỉ dùng cá nhân, có thể tắt lại sau khi tạo mã.
-6. Trong **Authentication → Sign In / Providers**, bật **Email** (website dùng provider này nội bộ để đăng nhập bằng mã ID, không yêu cầu email thật). Trong cài đặt Email, tắt **Confirm email**.
-7. Trong **Authentication → URL Configuration**, thêm URL triển khai vào Site URL và Redirect URLs.
-8. Deploy thư mục lên GitHub Pages, Netlify hoặc Cloudflare Pages. Nhấn **Tạo tài khoản** để sinh mã ID, lưu mã lại, rồi dùng chính mã đó để đăng nhập.
-
-Mã ID là một UUID ngẫu nhiên, đóng vai trò như mật khẩu: ai có mã đều có thể vào tài khoản. Khi đăng ký, có thể chọn ghi nhớ mã trong trình duyệt hiện tại; mã cũng có thể sao chép hoặc tải thành tệp để dùng trên thiết bị khác. Không nên ghi nhớ mã trên máy dùng chung. Nếu mất mã và không còn phiên đăng nhập, không thể khôi phục tài khoản. Không cần backend riêng hoặc bước build. Trình duyệt cần kết nối internet để đăng nhập, tải file và lấy thư viện đọc EPUB từ CDN. Giữ việc dùng trong quota hiện hành của gói Free; dung lượng/giới hạn của nhà cung cấp có thể thay đổi.
+- `src/App.jsx`: ghép giao diện trang thư viện và điều phối trạng thái.
+- `src/components/`: sidebar, thanh công cụ, thẻ tài liệu, danh sách, hộp thoại đăng nhập/thư mục và toast.
+- `src/hooks/useAuth.js`: phiên Supabase Auth và đăng nhập bằng mã ID.
+- `src/hooks/useLibrary.js`: đọc/ghi thư viện, upload file/thư mục và thao tác tài liệu.
+- `src/lib/`: khởi tạo Supabase và hàm định dạng/ánh xạ dữ liệu.
+- `src/reader/`: trang đọc riêng, bộ đọc EPUB/PDF/AZW3 và cache tiến độ đọc.
+- `src/styles.css`, `src/reader/reader.css`: style riêng cho từng màn hình.
+- `index.html`, `reader.html`: hai entry point do Vite build.
 
 ## Chạy trên máy
 
-Chạy web server tĩnh trong thư mục này, ví dụ trên PowerShell nếu đã cài Python:
+Cần Node.js 22.13 trở lên. Từ thư mục dự án:
 
 ```powershell
-python -m http.server 8000
+Copy-Item .env.example .env.local
 ```
 
-Mở `http://localhost:8000`. Đăng nhập, tạo thư mục rồi tải file lên. Nút tải thư mục sẽ lưu các file đã chọn vào thư mục trên cùng của cây thư mục được tải lên; file vẫn có thể được tìm qua đường dẫn tương đối ban đầu.
+Điền `VITE_SUPABASE_URL` và `VITE_SUPABASE_ANON_KEY` vào `.env.local`, sau đó:
 
-## Lưu trữ và quyền riêng tư
+```powershell
+npm install
+npm run dev
+```
 
-- File gốc nằm trong private Supabase Storage; metadata (tên, thư mục, trạng thái đọc và yêu thích) nằm trong cơ sở dữ liệu Supabase.
-- Cần đăng nhập để sử dụng. Các chính sách RLS và Storage trong `supabase-schema.sql` giới hạn dữ liệu theo tài khoản; không bật bucket thành public.
-- Hỗ trợ tải nhiều file và thư mục. Giới hạn client và bucket được đặt là 50 MB mỗi file để phù hợp cấu hình Free thông thường.
-- Ứng dụng dùng SHA-256 để bỏ qua tệp có nội dung trùng khớp trong cùng tài khoản, không nén hay sửa file gốc. Nếu tải cùng nội dung vào thư mục khác, bản đã có được giữ lại và bản mới bị bỏ qua. Chạy lại `supabase-schema.sql` để thêm cột và chỉ mục cần thiết; các tệp đã tải lên trước đó không được tự tính hash.
-- PDF, EPUB, AZW3 không DRM, hình ảnh và một số file văn bản có thể mở trực tiếp trong trình đọc của website. AZW/MOBI đời cũ có thể tải lên và tải xuống nhưng chưa đọc trực tiếp; hãy mở bằng ứng dụng tương thích trên thiết bị. AZW3 được phân tích trong trình duyệt; sách không được gửi đến dịch vụ chuyển đổi bên ngoài.
-- EPUB tự phân trang; AZW3 được dàn thành các trang theo kích thước màn hình ngay trong trình duyệt, có thể chuyển trang/chương bằng nút hoặc vuốt ngang trên điện thoại. Có thể đổi cỡ chữ và nền sáng, sepia hoặc tối.
-- EPUB và AZW3 đã mở được lưu trong bộ nhớ đệm riêng của trình duyệt (tối đa 200 MiB, tự loại sách ít dùng trước khi đầy). Lần sau cùng thiết bị sẽ lấy sách từ bộ nhớ đệm thay vì tải lại từ Supabase; bộ nhớ đệm không đồng bộ sang thiết bị khác và không dùng thêm dung lượng Supabase. Trên máy dùng chung, cache vẫn còn sau khi đăng xuất; xóa dữ liệu trang web trong trình duyệt để xóa sách đã lưu tại máy.
-- Trên điện thoại hoặc máy tính bảng, mở cùng địa chỉ website và đăng nhập bằng cùng mã ID để đồng bộ thư viện. Giao diện tự điều chỉnh theo màn hình; không cần cài ứng dụng riêng.
-- Xóa một tài liệu sẽ xóa file gốc trong Storage và thông tin của file trong thư viện. Không thể tự khôi phục sau khi xóa.
+Mở địa chỉ localhost do Vite hiển thị. Có thể tạo bản production và chạy thử bằng:
+
+```powershell
+npm run build
+npm run preview
+```
+
+`.env.local`, `supabase-config.js` và `supabase-schema.sql` được Git bỏ qua. Giữ riêng cấu hình Supabase và chạy schema thủ công trong Supabase SQL Editor. Dùng public anon/publishable key ở frontend; tuyệt đối không dùng `service_role` hoặc secret key.
+
+## Cấu hình Supabase
+
+1. Tạo project Supabase trên gói Free.
+2. Dùng nội dung `supabase-schema.sql` tại máy của bạn trong **SQL Editor** để tạo bảng, RLS, Storage bucket và policies.
+3. Trong **Authentication → Settings → User Signups**, bật đăng ký khi tạo mã ID. Có thể tắt lại sau đó.
+4. Bật **Email provider** và tắt **Confirm email**. Website chỉ yêu cầu mã ID; email tổng hợp chỉ được dùng nội bộ cho Supabase Auth.
+5. Thêm URL local và URL website triển khai vào **Authentication → URL Configuration → Redirect URLs**.
+
+Mã ID là bí mật đăng nhập. Ai có mã đều có thể truy cập thư viện; nếu mất mã và không còn phiên đăng nhập thì không thể khôi phục tài khoản. Mã được lưu trên thiết bị hiện tại nếu chọn ghi nhớ; hãy sao chép hoặc tải mã để dùng trên thiết bị khác.
+
+## CI/CD GitHub Pages
+
+Workflow nằm trong `.github/workflows/`:
+
+- `ci.yml`: chạy `npm ci` và `npm run build` trên pull request và push lên `main`.
+- `deploy.yml`: build rồi deploy tự động lên GitHub Pages khi push lên `main` (hoặc chạy thủ công).
+
+Trong GitHub repository, thêm hai **Actions variables**:
+
+- `VITE_SUPABASE_URL`: Project URL.
+- `VITE_SUPABASE_ANON_KEY`: public anon/publishable key.
+
+Sau đó vào **Settings → Pages**, chọn source **GitHub Actions**. Vite đã cấu hình base path cho repository `MyLibrary`; workflow build website và đưa nội dung `dist/` lên Pages. Các giá trị này được nhúng vào mã trình duyệt nên chỉ dùng public anon key, còn quyền truy cập dữ liệu phải được giới hạn bằng RLS.
+
+## Dữ liệu và giới hạn
+
+- File gốc nằm trong private Supabase Storage bucket `library-files`; metadata và thư mục nằm trong PostgreSQL.
+- Hỗ trợ tải nhiều file hoặc cả thư mục, giới hạn client/storage 50 MB mỗi file.
+- Tệp trùng nội dung trong cùng tài khoản được bỏ qua bằng SHA-256.
+- Hỗ trợ xem trực tiếp PDF, EPUB, AZW3 không DRM, hình ảnh và một số file văn bản. Loại khác có thể tải xuống để mở bằng ứng dụng phù hợp.
+- Tiến độ PDF (trang), EPUB (vị trí CFI) và AZW3 (chương) được lưu trong bộ nhớ trình duyệt theo tài khoản và tài liệu; mở lại trên cùng thiết bị sẽ tiếp tục từ vị trí đó. Tiến độ này không đồng bộ giữa các thiết bị và sẽ mất nếu xóa dữ liệu trình duyệt.
+- Reader tối ưu cho điện thoại và tablet: trang PDF vừa chiều rộng, điều khiển chạm/swipe, EPUB/AZW3 hỗ trợ vuốt chuyển trang/chương, cùng tùy chỉnh cỡ chữ và nền sáng/sepia/tối.
+- Không đưa Supabase service key vào client hoặc GitHub Actions variables.

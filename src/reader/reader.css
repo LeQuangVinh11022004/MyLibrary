@@ -1,0 +1,85 @@
+.reader-app { --reader-page: #fffefa; --reader-ink: #292d28; --reader-bg: #f3f0e8; height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; background: var(--reader-bg); color: #2b342b; }
+.reader-theme-sepia { --reader-page: #f2e8d5; --reader-ink: #463a2e; }
+.reader-theme-dark { --reader-page: #20241f; --reader-ink: #eee9df; color: #eee9df; }
+.reader-header { position: relative; z-index: 3; min-height: 65px; display: grid; grid-template-columns: 1fr minmax(0, 2fr) 1fr; align-items: center; gap: 18px; padding: 0 clamp(14px, 3vw, 45px); border-bottom: 1px solid #dfded5; background: #fffefaed; backdrop-filter: blur(14px); }
+.reader-back { display: inline-flex; align-items: center; gap: 9px; width: fit-content; color: #5b695a; text-decoration: none; font-size: 11px; font-weight: 600; }
+.reader-back > span { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #e6e5dc; border-radius: 50%; background: #fff; }
+.reader-back:hover { color: var(--green); }
+.reader-book-heading { min-width: 0; display: grid; justify-items: center; gap: 3px; text-align: center; }
+.reader-book-heading strong { max-width: 100%; overflow: hidden; color: #303930; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.reader-book-heading > span { color: #92978d; font-size: 9px; letter-spacing: .5px; }
+.reader-header-actions { display: flex; justify-content: flex-end; gap: 7px; }
+.reader-header-button { width: 35px; height: 35px; display: grid; place-items: center; border: 1px solid #e6e5dc; border-radius: 50%; background: #fffefa; color: #667260; cursor: pointer; }
+.reader-header-button:hover:not(:disabled), .reader-header-button.is-read { border-color: #cad6c4; background: #edf3e9; color: var(--green); }
+.reader-header-button:disabled { opacity: .45; cursor: not-allowed; }
+.reader-toolbar { position: relative; z-index: 2; min-height: 51px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px clamp(14px, 3vw, 45px); border-bottom: 1px solid #e7e4da; background: #fbfaf6f0; }
+.reader-page-nav, .reader-settings { display: flex; align-items: center; gap: 6px; }
+.reader-page-nav { flex: 1; justify-content: center; }
+.reader-settings { min-width: 210px; justify-content: flex-end; }
+.reader-control { min-height: 33px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 9px; border: 1px solid #e7e5dc; border-radius: 8px; background: #fffefa; color: #606b5d; font-size: 10px; cursor: pointer; }
+.reader-control:hover { border-color: #cdd6c7; background: #f1f4ed; color: var(--green); }
+.reader-location { min-width: 95px; color: #858b80; font-size: 10px; text-align: center; }
+.font-control { min-width: 39px; gap: 0; font-weight: 600; }
+.font-control span { font-family: Georgia, serif; font-size: 13px; }
+.font-size-indicator { color: #9da196; font-size: 9px; }
+.theme-control { min-width: 78px; margin-left: 3px; }
+.reader-viewport { position: relative; min-height: 0; flex: 1; overflow: hidden; background: var(--reader-page); color: var(--reader-ink); }
+.reader-viewport.pdf-viewport { background: #dddcd7; }
+.pdf-reader { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.pdf-reader-controls { min-height: 48px; display: flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 8px; padding: 5px 12px; border-bottom: 1px solid #e7e4da; background: #fbfaf6; }
+.pdf-control { width: 40px; min-width: 40px; height: 38px; padding: 0; }
+.pdf-page-count, .pdf-zoom-label { min-width: 62px; color: #606b5d; font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
+.pdf-zoom-label { min-width: 48px; font-size: 10px; }
+.pdf-control-spacer { width: 12px; }
+.pdf-page-stage { position: relative; min-height: 0; flex: 1; overflow: auto; display: flex; justify-content: center; padding: 8px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.pdf-page-stage.is-zoomed { justify-content: flex-start; }
+.pdf-page-canvas { flex: 0 0 auto; max-width: none; align-self: flex-start; background: #fff; box-shadow: 0 3px 18px #292d281c; }
+.pdf-page-loading { position: absolute; z-index: 1; top: 12px; left: 50%; padding: 7px 11px; border: 1px solid #e7e4da; border-radius: 99px; background: #fffefae8; color: #657060; font-size: 11px; transform: translateX(-50%); pointer-events: none; }
+.pdf-reader-error { max-width: 600px; margin: auto; padding: 24px; color: #8b443b; text-align: center; }
+.image-reader { width: 100%; height: 100%; display: grid; place-items: center; overflow: auto; padding: 20px; }
+.image-reader img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.text-reader { width: min(900px, 100%); height: 100%; overflow: auto; margin: 0 auto; padding: clamp(20px, 6vw, 70px); background: var(--reader-page); color: var(--reader-ink); font: 16px/1.8 "Literata", Georgia, serif; white-space: pre-wrap; overflow-wrap: anywhere; }
+.epub-canvas { width: min(1200px, 100%); height: 100%; margin: 0 auto; background: var(--reader-page); color: var(--reader-ink); }
+.epub-page { width: 100%; height: 100%; }
+.epub-page iframe { background: var(--reader-page) !important; }
+.azw3-frame { width: 100%; height: 100%; display: block; border: 0; background: var(--reader-page); }
+.reader-loading { position: absolute; z-index: 1; inset: 0; display: flex; align-items: center; justify-content: center; gap: 11px; background: var(--reader-page); color: #838a7e; font-size: 12px; }
+.reader-loading .spin { color: var(--green); animation: spin 1s linear infinite; }
+.reader-error { width: min(520px, calc(100% - 32px)); position: absolute; inset: 50% auto auto 50%; padding: 30px; border: 1px solid #e8e5dc; border-radius: 15px; background: #fffefa; box-shadow: var(--shadow); text-align: center; transform: translate(-50%, -50%); }
+.reader-error-icon { width: 38px; height: 38px; display: grid; place-items: center; margin: auto auto 12px; border-radius: 50%; background: #faefeb; color: #a65042; font: 600 20px var(--serif); }
+.reader-error h2 { margin: 0; font: 500 20px var(--serif); }
+.reader-error p { color: #7e847a; font-size: 11px; line-height: 1.6; }
+.reader-return-link { display: inline-flex; align-items: center; min-height: 38px; padding: 0 14px; border-radius: 8px; background: var(--green); color: #fff; text-decoration: none; font-size: 10px; font-weight: 600; }
+.reader-toast { position: fixed; z-index: 10; right: 18px; bottom: 18px; max-width: min(410px, calc(100% - 36px)); padding: 11px 14px; border: 1px solid #e5e7de; border-radius: 9px; background: #fffefa; color: #52604e; box-shadow: var(--shadow); font-size: 10px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 600px) {
+  .reader-header { min-height: 56px; grid-template-columns: auto minmax(0, 1fr) auto; gap: 7px; padding: 0 8px; }
+  .reader-back { gap: 4px; font-size: 9px; }
+  .reader-back > span { width: 31px; height: 31px; }
+  .reader-book-heading strong { font-size: 10px; }
+  .reader-book-heading > span { font-size: 8px; }
+  .reader-header-actions { gap: 4px; }
+  .reader-header-button { width: 32px; height: 32px; }
+  .reader-toolbar { min-height: 49px; gap: 3px; padding: 4px 6px; }
+  .reader-page-nav, .reader-settings { gap: 3px; }
+  .reader-settings { min-width: 0; }
+  .reader-control { min-height: 42px; padding: 0 7px; font-size: 10px; }
+  .reader-location { min-width: 52px; font-size: 9px; }
+  .font-control { min-width: 42px; }
+  .font-size-indicator { display: none; }
+  .theme-control { min-width: 64px; }
+  .pdf-reader-controls { min-height: 56px; gap: 6px; padding: 6px 8px; }
+  .pdf-control { width: 44px; min-width: 44px; height: 44px; }
+  .pdf-page-count { min-width: 54px; font-size: 11px; }
+  .pdf-zoom-label { min-width: 40px; }
+  .pdf-control-spacer { width: 2px; }
+  .pdf-page-stage { padding: 6px; }
+  .reader-error { padding: 23px 18px; }
+}
+@media (min-width: 601px) and (max-width: 900px) {
+  .reader-toolbar { padding-right: 14px; padding-left: 14px; }
+  .reader-settings { min-width: 185px; }
+  .reader-control { min-height: 40px; }
+  .pdf-reader-controls { min-height: 54px; }
+  .pdf-control { width: 44px; min-width: 44px; height: 44px; }
+}
