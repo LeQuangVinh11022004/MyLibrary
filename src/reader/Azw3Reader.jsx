@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 const PARSER_URL = "https://cdn.jsdelivr.net/npm/@lingo-reader/mobi-parser@0.4.6/+esm";
 
@@ -20,7 +20,7 @@ function sanitizeHtml(html) {
   return parsed.body.innerHTML;
 }
 
-export function Azw3Reader({
+export const Azw3Reader = forwardRef(function Azw3Reader({
   blob,
   initialProgress,
   theme,
@@ -31,10 +31,27 @@ export function Azw3Reader({
   onPrevious,
   onProgress,
   onReady,
-}) {
+}, ref) {
   const [chapter, setChapter] = useState(null);
   const iframeRef = useRef(null);
   const initialProgressRef = useRef(initialProgress);
+
+  useImperativeHandle(ref, () => ({
+    search: async (query) => {
+      if (!chapter) throw new Error("AZW3 chưa sẵn sàng để tìm kiếm.");
+      const cleanQuery = query.toLocaleLowerCase("vi");
+      for (let index = 0; index < chapter.spine.length; index += 1) {
+        const contents = chapter.book.loadChapter(chapter.spine[index].id);
+        const searchableText = new DOMParser().parseFromString(sanitizeHtml(contents?.html || ""), "text/html")
+          .body.textContent.toLocaleLowerCase("vi");
+        if (searchableText.includes(cleanQuery)) {
+          onChapter(chapter.spine.length, index);
+          return `Tìm thấy trong chương ${index + 1} / ${chapter.spine.length}.`;
+        }
+      }
+      return "Không tìm thấy nội dung phù hợp trong AZW3.";
+    },
+  }), [chapter, onChapter]);
 
   useEffect(() => {
     let active = true;
@@ -126,7 +143,7 @@ export function Azw3Reader({
   const safeHtml = sanitizeHtml(contents.html);
   const frameHtml = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; connect-src 'none'; img-src blob: data:; media-src blob: data:; style-src 'unsafe-inline' blob: data:; font-src blob: data:; object-src 'none'; script-src 'none';"><style>html,body{margin:0;min-height:100%;background:${colors[0]};color:${colors[1]}}body{padding:clamp(24px,6vw,76px);font:${fontSize}px/1.8 Georgia,serif;overflow-wrap:anywhere}img{max-width:100%;height:auto}</style></head><body>${safeHtml}</body></html>`;
   return <iframe ref={iframeRef} className="azw3-frame" title={`AZW3, chương ${chapterIndex + 1}`} sandbox="allow-same-origin" srcDoc={frameHtml} />;
-}
+});
 
 function chapterCount(chapter) {
   return chapter.spine.length;

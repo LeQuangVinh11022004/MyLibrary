@@ -1,7 +1,11 @@
 supabase-config.js
 supabase-schema.sql
+docker.env
+docker.env.*
+!docker.env.example
 node_modules/
 dist/
+*.log
 .env
 .env.*
 !.env.example

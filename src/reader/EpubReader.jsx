@@ -20,11 +20,35 @@ export const EpubReader = forwardRef(function EpubReader({
   onReady,
 }, ref) {
   const mountRef = useRef(null);
+  const bookRef = useRef(null);
   const renditionRef = useRef(null);
   const initialProgressRef = useRef(initialProgress);
   useImperativeHandle(ref, () => ({
     previous: () => renditionRef.current?.prev(),
     next: () => renditionRef.current?.next(),
+    goTo: (progress) => renditionRef.current?.display(progress?.cfi || progress?.percentage || undefined),
+    search: async (query) => {
+      const book = bookRef.current;
+      const rendition = renditionRef.current;
+      if (!book || !rendition) throw new Error("EPUB chưa sẵn sàng để tìm kiếm.");
+      const cleanQuery = query.toLocaleLowerCase("vi");
+      const currentSectionIndex = rendition.currentLocation()?.start?.index;
+      for (const section of book.spine.spineItems) {
+        let found = false;
+        try {
+          await section.load(book.load.bind(book));
+          const [match] = section.find(cleanQuery);
+          if (match) {
+            await rendition.display(match.cfi);
+            found = true;
+            return `Tìm thấy trong sách: “${match.excerpt}”`;
+          }
+        } finally {
+          if (!found && section.index !== currentSectionIndex) section.unload();
+        }
+      }
+      return "Không tìm thấy nội dung phù hợp trong EPUB.";
+    },
   }), []);
 
   useEffect(() => {
@@ -46,6 +70,7 @@ export const EpubReader = forwardRef(function EpubReader({
         book = ePub();
         await book.open(content, "binary");
         bookOpened = true;
+        bookRef.current = book;
         if (disposed || !mountRef.current) {
           destroyBook();
           return;
@@ -122,6 +147,7 @@ export const EpubReader = forwardRef(function EpubReader({
       disposed = true;
       renditionRef.current?.destroy();
       renditionRef.current = null;
+      bookRef.current = null;
       if (bookOpened) destroyBook();
     };
   }, [blob, onReady, onLocation, onProgress]);

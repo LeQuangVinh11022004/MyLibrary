@@ -1,10 +1,14 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, Download, LoaderCircle } from "lucide-react";
+import { ArrowLeft, Check, CloudDownload, Download, Fingerprint, LoaderCircle, NotebookPen, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { formatFileSize } from "../lib/library-utils";
+import { anchorOrVerifyFileHash, isHashRegistryConfigured } from "../lib/blockchain";
 import { Azw3Reader } from "./Azw3Reader";
 import { PdfReader } from "./PdfReader";
+import { ReaderAnnotations } from "./ReaderAnnotations";
+import { ReaderSearch } from "./ReaderSearch";
 import { ReaderToolbar } from "./ReaderToolbar";
+import { cacheDocument, getCachedDocument, removeCachedDocument } from "../lib/offline-cache";
 import { loadReadingProgress, saveReadingProgress } from "./reading-progress";
 import "./reader.css";
 
@@ -13,6 +17,10 @@ const EpubReader = lazy(() => import("./EpubReader").then(({ EpubReader: Reader 
 
 function getExtension(name = "") {
   return name.split(".").pop()?.toLowerCase() || "";
+}
+
+function isNetworkFailure(error) {
+  return !window.navigator.onLine || /failed to fetch|network|timeout|connection|offline/i.test(error?.message || "");
 }
 
 function savedPreference(key, fallback) {
@@ -43,10 +51,23 @@ export default function ReaderApp() {
   const [chapterIndex, setChapterIndex] = useState(0);
   const [chapterCount, setChapterCount] = useState(1);
   const [toast, setToast] = useState("");
+  const [annotations, setAnnotations] = useState([]);
+  const [annotationsOpen, setAnnotationsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [offlineAvailable, setOfflineAvailable] = useState(false);
+  const [offlineCopyActive, setOfflineCopyActive] = useState(false);
+  const [offlineBusy, setOfflineBusy] = useState(false);
+  const [blockchainBusy, setBlockchainBusy] = useState(false);
+  const [blockchainTx, setBlockchainTx] = useState("");
+  const [isOnline, setIsOnline] = useState(() => window.navigator.onLine);
   const epubRef = useRef(null);
+  const pdfRef = useRef(null);
+  const azw3Ref = useRef(null);
+  const textReaderRef = useRef(null);
   const toastTimer = useRef(null);
   const progressIdentityRef = useRef(null);
   const progressWriteWarningRef = useRef(false);
+  const progressSyncWarningRef = useRef(false);
   const extension = getExtension(item?.name);
   const isPdf = extension === "pdf" || item?.content_type === "application/pdf";
   const isEpub = extension === "epub";
@@ -60,8 +81,21 @@ export default function ReaderApp() {
 
   const notify = useCallback((message) => {
     setToast(message);
+    setBlockchainTx("");
     window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(""), 3600);
+  }, []);
+
+  useEffect(() => {
+    function updateNetworkState() {
+      setIsOnline(window.navigator.onLine);
+    }
+    window.addEventListener("online", updateNetworkState);
+    window.addEventListener("offline", updateNetworkState);
+    return () => {
+      window.removeEventListener("online", updateNetworkState);
+      window.removeEventListener("offline", updateNetworkState);
+    };
   }, []);
 
   const handleReady = useCallback((cause) => {
@@ -90,6 +124,32 @@ export default function ReaderApp() {
       }
     }
   }, [notify]);
+
+  useEffect(() => {
+    if (!progressReady || !item || !user || !readingProgress) return undefined;
+    if (!isOnline) {
+      if (!progressSyncWarningRef.current) {
+        progressSyncWarningRef.current = true;
+        notify("Đang offline; tiến độ sẽ đồng bộ khi có mạng trở lại.");
+      }
+      return undefined;
+    }
+    const timer = window.setTimeout(async () => {
+      try {
+        const { error: syncError } = await supabase.from("library_documents")
+          .update({ reading_progress: readingProgress }).eq("id", item.id);
+        if (syncError) throw syncError;
+        progressSyncWarningRef.current = false;
+      } catch (syncError) {
+        console.error("Không thể đồng bộ tiến độ đọc.", syncError);
+        if (!progressSyncWarningRef.current) {
+          progressSyncWarningRef.current = true;
+          notify("Tiến độ đã lưu trên thiết bị nhưng chưa đồng bộ được.");
+        }
+      }
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [isOnline, item, notify, progressReady, readingProgress, user]);
   const handleChapter = useCallback((count, initialIndex) => {
     setChapterCount(count);
     setChapterIndex(Math.min(count - 1, Math.max(0, initialIndex)));
@@ -125,9 +185,16 @@ export default function ReaderApp() {
         if (sessionError) throw sessionError;
         if (!sessionData.session?.user) throw new Error("Phiên đăng nhập chưa có trên thiết bị này. Trở về thư viện và đăng nhập lại.");
         const currentUser = sessionData.session.user;
-        const { data: document, error: documentError } = await supabase.from("library_documents")
+        let cachedDocument = null;
+        try {
+          cachedDocument = await getCachedDocument(currentUser.id, id);
+        } catch (cacheError) {
+          console.warn("Không thể kiểm tra bản offline.", cacheError);
+        }
+        const { data: onlineDocument, error: documentError } = await supabase.from("library_documents")
           .select("*").eq("id", id).single();
-        if (documentError) throw documentError;
+        if (documentError && (!cachedDocument?.metadata || !isNetworkFailure(documentError))) throw documentError;
+        const document = documentError ? cachedDocument.metadata : onlineDocument;
         const ext = getExtension(document.name);
         const isImageFile = document.content_type?.startsWith("image/")
           || ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext);
@@ -138,23 +205,46 @@ export default function ReaderApp() {
             && !isImageFile && !isTextFile) {
           throw new Error("Định dạng này chưa xem trực tiếp được. Hãy tải xuống để mở bằng ứng dụng phù hợp.");
         }
-        const { data: fileBlob, error: downloadError } = await supabase.storage.from("library-files").download(document.storage_path);
-        if (downloadError) throw downloadError;
+        const { data: onlineAnnotations, error: annotationError } = await supabase.from("reader_annotations")
+          .select("*").eq("document_id", document.id).order("created_at", { ascending: false });
+        if (annotationError && (!cachedDocument?.annotations || !isNetworkFailure(annotationError))) throw annotationError;
+        const annotationRows = annotationError ? cachedDocument.annotations : onlineAnnotations;
+        const { data: downloadedBlob, error: downloadError } = await supabase.storage.from("library-files").download(document.storage_path);
+        if (downloadError && (!cachedDocument?.blob || !isNetworkFailure(downloadError))) throw downloadError;
+        const fileBlob = downloadError ? cachedDocument.blob : downloadedBlob;
         if (!active) return;
-        const savedProgress = loadReadingProgress(currentUser.id, document.id);
+        const validProgress = (progress) => progress && ["epub", "pdf", "azw3"].includes(progress.format);
+        const localProgress = loadReadingProgress(currentUser.id, document.id);
+        const storedProgress = validProgress(document.reading_progress) ? document.reading_progress : null;
+        const savedProgress = validProgress(localProgress)
+          && (!storedProgress || (localProgress.updatedAt || 0) > (storedProgress.updatedAt || 0))
+          ? localProgress
+          : storedProgress;
         progressIdentityRef.current = { userId: currentUser.id, documentId: document.id };
         progressWriteWarningRef.current = false;
+        progressSyncWarningRef.current = false;
         setReadingProgress(savedProgress);
         setProgressReady(true);
         setUser(currentUser);
         setItem(document);
         setBlob(fileBlob);
+        setAnnotations(annotationRows.map((row) => ({
+          id: row.id,
+          kind: row.kind,
+          body: row.body,
+          location: row.location,
+          createdAt: row.created_at,
+        })));
+        setOfflineAvailable(Boolean(cachedDocument?.blob));
+        setOfflineCopyActive(Boolean(downloadError));
         setLoading(false);
-        const { error: updateError } = await supabase.from("library_documents")
-          .update({ last_opened: new Date().toISOString() }).eq("id", document.id);
-        if (updateError) {
-          console.error("Không thể cập nhật lần mở gần nhất.", updateError);
-          notify(`Đã mở sách nhưng không cập nhật được lịch sử: ${updateError.message}`);
+        if (!downloadError) {
+          const { error: updateError } = await supabase.from("library_documents")
+            .update({ last_opened: new Date().toISOString() }).eq("id", document.id);
+          if (updateError) {
+            console.error("Không thể cập nhật lần mở gần nhất.", updateError);
+            notify(`Đã mở sách nhưng không cập nhật được lịch sử: ${updateError.message}`);
+          }
         }
       } catch (cause) {
         if (!active) return;
@@ -226,6 +316,120 @@ export default function ReaderApp() {
     notify(status === "read" ? "Đã đánh dấu đã đọc." : "Đã chuyển về chưa đọc.");
   }
 
+  function currentLocation() {
+    if (readingProgress) return readingProgress;
+    if (isPdf) return { format: "pdf", pageNumber: 1, totalPages: 1, zoom: 1 };
+    if (isEpub) return { format: "epub", cfi: "", percentage: 0 };
+    if (isAzw3) return { format: "azw3", chapterIndex, totalChapters: chapterCount };
+    return { format: "text", offset: 0 };
+  }
+
+  async function createAnnotation(kind, body = "") {
+    if (!item || !user) throw new Error("Cần đăng nhập để lưu dấu trang và ghi chú.");
+    const { data, error: insertError } = await supabase.from("reader_annotations")
+      .insert({
+        owner_id: user.id,
+        document_id: item.id,
+        kind,
+        body,
+        location: currentLocation(),
+      })
+      .select("*").single();
+    if (insertError) throw insertError;
+    setAnnotations((current) => [{
+      id: data.id,
+      kind: data.kind,
+      body: data.body,
+      location: data.location,
+      createdAt: data.created_at,
+    }, ...current]);
+    notify(kind === "bookmark" ? "Đã thêm dấu trang." : "Đã lưu ghi chú.");
+  }
+
+  async function deleteAnnotation(id) {
+    const { error: deleteError } = await supabase.from("reader_annotations").delete().eq("id", id);
+    if (deleteError) {
+      console.error("Không thể xóa dấu trang hoặc ghi chú.", deleteError);
+      notify(`Không thể xóa: ${deleteError.message}`);
+      return;
+    }
+    setAnnotations((current) => current.filter((annotation) => annotation.id !== id));
+  }
+
+  function jumpTo(locationToRestore) {
+    if (!locationToRestore) return;
+    handleProgress(locationToRestore);
+    if (locationToRestore.format === "pdf") {
+      pdfRef.current?.goTo(locationToRestore);
+    } else if (locationToRestore.format === "epub") {
+      epubRef.current?.goTo(locationToRestore)?.catch((cause) => notify(`Không thể mở vị trí EPUB: ${cause.message}`));
+    } else if (locationToRestore.format === "azw3") {
+      setChapterIndex(Math.min(chapterCount - 1, Math.max(0, locationToRestore.chapterIndex || 0)));
+    }
+  }
+
+  async function searchDocument(query) {
+    if (isPdf) return pdfRef.current?.search(query);
+    if (isEpub) return epubRef.current?.search(query);
+    if (isAzw3) return azw3Ref.current?.search(query);
+    if (!isText) throw new Error("Định dạng này chưa hỗ trợ tìm trong nội dung.");
+    const index = textContent.toLocaleLowerCase("vi").indexOf(query.toLocaleLowerCase("vi"));
+    if (index < 0) return "Không tìm thấy nội dung phù hợp.";
+    const textNode = textReaderRef.current?.firstChild;
+    if (textNode) {
+      const range = window.document.createRange();
+      range.setStart(textNode, index);
+      range.setEnd(textNode, index + query.length);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      range.startContainer.parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    return "Đã tìm thấy và chọn nội dung khớp.";
+  }
+
+  async function toggleOfflineCopy() {
+    if (!item || !user || !blob) return;
+    setOfflineBusy(true);
+    try {
+      if (offlineAvailable) {
+        await removeCachedDocument(user.id, item.id);
+        setOfflineAvailable(false);
+        if (offlineCopyActive) setOfflineCopyActive(false);
+        notify("Đã xóa bản lưu offline trên thiết bị này.");
+      } else {
+        await cacheDocument(user.id, item.id, blob, item, annotations);
+        setOfflineAvailable(true);
+        notify("Đã lưu tài liệu để đọc offline trên thiết bị này.");
+      }
+    } catch (cause) {
+      console.error("Không thể cập nhật bản lưu offline.", cause);
+      notify(`Không thể lưu offline: ${cause.message}`);
+    } finally {
+      setOfflineBusy(false);
+    }
+  }
+
+  async function anchorCurrentFileHash() {
+    if (!blob) return;
+    setBlockchainBusy(true);
+    try {
+      const proof = await anchorOrVerifyFileHash(blob);
+      if (proof.status === "anchored") {
+        notify("Đã neo hash file lên Sepolia.");
+        setBlockchainTx(proof.transactionHash);
+      } else {
+        const anchoredAt = new Date(proof.timestamp * 1000).toLocaleString("vi-VN");
+        notify(`Hash khớp với bản đã neo trên Sepolia (${anchoredAt}).`);
+      }
+    } catch (cause) {
+      console.error("Không thể neo hash file lên blockchain.", cause);
+      notify(`Không thể neo hash: ${cause.message}`);
+    } finally {
+      setBlockchainBusy(false);
+    }
+  }
+
   function downloadBook() {
     if (!blob || !item) return;
     const url = URL.createObjectURL(blob);
@@ -248,6 +452,11 @@ export default function ReaderApp() {
         <div className="reader-header-actions">
           <button className="reader-header-button" type="button" onClick={downloadBook} disabled={!blob} aria-label="Tải sách xuống" title="Tải sách xuống"><Download size={18} /></button>
           <button className={`reader-header-button${item?.status === "read" ? " is-read" : ""}`} type="button" onClick={toggleRead} disabled={!item} aria-label={item?.status === "read" ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"} title={item?.status === "read" ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"}><Check size={18} /></button>
+          {(isPdf || isBook) && <button className="reader-header-button" type="button" onClick={() => createAnnotation("bookmark").catch((cause) => notify(cause.message))} disabled={!readerReady} aria-label="Thêm dấu trang" title="Thêm dấu trang"><BookmarkPlus size={18} /></button>}
+          <button className={`reader-header-button${annotationsOpen ? " is-read" : ""}`} type="button" onClick={() => { setAnnotationsOpen((open) => !open); setSearchOpen(false); }} disabled={!item} aria-label="Mở dấu trang và ghi chú" title="Dấu trang và ghi chú"><NotebookPen size={18} /></button>
+          <button className={`reader-header-button${offlineAvailable ? " is-read" : ""}`} type="button" onClick={toggleOfflineCopy} disabled={!blob || offlineBusy} aria-label={offlineAvailable ? "Xóa bản offline" : "Lưu để đọc offline"} title={offlineAvailable ? "Xóa bản offline" : "Lưu để đọc offline"}><CloudDownload size={18} /></button>
+          <button className="reader-header-button" type="button" onClick={anchorCurrentFileHash} disabled={!blob || blockchainBusy || !isHashRegistryConfigured} aria-label={isHashRegistryConfigured ? "Neo hash file lên Sepolia" : "Neo hash (chưa cấu hình smart contract)"} title={isHashRegistryConfigured ? "Neo hash file lên Sepolia (công khai)" : "Cần triển khai FileHashRegistry và cấu hình địa chỉ"}><Fingerprint size={18} /></button>
+          {(isPdf || isBook || isText) && <button className={`reader-header-button${searchOpen ? " is-read" : ""}`} type="button" onClick={() => { setSearchOpen((open) => !open); setAnnotationsOpen(false); }} disabled={!readerReady && !isText} aria-label="Tìm trong tài liệu" title="Tìm trong tài liệu"><Search size={18} /></button>}
         </div>
       </header>
       {isBook && item && (
@@ -264,17 +473,28 @@ export default function ReaderApp() {
       <section className={`reader-viewport${isPdf ? " pdf-viewport" : ""}`}>
         {(loading || (blob && progressReady && (isPdf || isBook) && !readerReady && !error)) && <div className="reader-loading"><LoaderCircle size={26} className="spin" /><span>Đang mở tài liệu từ thư viện…</span></div>}
         {error && <div className="reader-error"><span className="reader-error-icon">!</span><h2>Chưa mở được tài liệu</h2><p>{error}</p><a className="reader-return-link" href={backLink}>Quay về thư viện</a></div>}
-        {blob && progressReady && isPdf && <PdfReader blob={blob} initialProgress={readingProgress} onProgress={handleProgress} onReady={handleReady} />}
+        {blob && progressReady && isPdf && <PdfReader ref={pdfRef} blob={blob} initialProgress={readingProgress} onProgress={handleProgress} onReady={handleReady} />}
         {blob && isImage && <div className="image-reader"><img src={objectUrl} alt={item.name} /></div>}
-        {blob && isText && <pre className="text-reader">{textContent}</pre>}
+        {blob && isText && <pre ref={textReaderRef} className="text-reader">{textContent}</pre>}
         {blob && progressReady && isEpub && (
           <Suspense fallback={null}>
             <EpubReader ref={epubRef} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} onLocation={handleLocation} onProgress={handleProgress} onReady={handleReady} />
           </Suspense>
         )}
-        {blob && progressReady && isAzw3 && <Azw3Reader key={item.id} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} chapterIndex={chapterIndex} onChapter={handleChapter} onNext={nextPage} onPrevious={previousPage} onProgress={handleProgress} onReady={handleReady} />}
+        {blob && progressReady && isAzw3 && <Azw3Reader ref={azw3Ref} key={item.id} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} chapterIndex={chapterIndex} onChapter={handleChapter} onNext={nextPage} onPrevious={previousPage} onProgress={handleProgress} onReady={handleReady} />}
       </section>
-      {toast && <div className="reader-toast" role="status">{toast}</div>}
+      <ReaderAnnotations
+        open={annotationsOpen}
+        annotations={annotations}
+        onClose={() => setAnnotationsOpen(false)}
+        onBookmark={() => createAnnotation("bookmark").catch((cause) => notify(cause.message))}
+        onCreate={(body) => createAnnotation("note", body)}
+        onDelete={deleteAnnotation}
+        onJump={jumpTo}
+      />
+      <ReaderSearch open={searchOpen} onClose={() => setSearchOpen(false)} onSearch={searchDocument} />
+      {offlineCopyActive && <div className="reader-offline-indicator" role="status">Đang đọc bản đã lưu trên thiết bị</div>}
+      {toast && <div className="reader-toast" role="status">{toast}{blockchainTx && <a href={`https://sepolia.etherscan.io/tx/${blockchainTx}`} target="_blank" rel="noreferrer">Xem giao dịch</a>}</div>}
     </main>
   );
 }

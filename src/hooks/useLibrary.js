@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { removeCachedDocument } from "../lib/offline-cache";
 import { supabase } from "../lib/supabase";
 import {
   getUploadErrorMessage,
@@ -195,8 +196,15 @@ export function useLibrary(user, notify) {
     const { error } = await supabase.from("library_documents").delete().eq("id", id);
     if (error) throw error;
     setDocuments((items) => items.filter((document) => document.id !== id));
+    try {
+      await removeCachedDocument(user.id, item.id);
+    } catch (cacheError) {
+      console.error("Không thể xóa bản offline khỏi thiết bị.", cacheError);
+      notify("Đã xóa bản cloud, nhưng cần xóa thủ công bản offline trên thiết bị này.");
+      return;
+    }
     notify("Đã xóa tài liệu khỏi thư viện.");
-  }, [documents, notify]);
+  }, [documents, notify, user]);
 
   return {
     documents,

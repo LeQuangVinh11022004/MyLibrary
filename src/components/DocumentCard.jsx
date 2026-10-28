@@ -1,4 +1,4 @@
-import { BookOpen, Download, FileText, Heart, MoreHorizontal, Trash2 } from "lucide-react";
+import { BookOpen, Download, FileText, Heart, Trash2 } from "lucide-react";
 import { formatDate, formatFileSize, getFileKind } from "../lib/library-utils";
 
 export function DocumentCard({ document, folderName, onOpen, onFavorite, onDownload, onDelete, onRead }) {
@@ -30,7 +30,6 @@ export function DocumentCard({ document, folderName, onOpen, onFavorite, onDownl
       <div className="document-info">
         <div className="document-title-row">
           <button className="document-title" type="button" onClick={onOpen} title={document.name}>{document.name}</button>
-          <button className="more-button" type="button" aria-label="Tùy chọn tài liệu" title="Tùy chọn tài liệu" onClick={onDownload}><MoreHorizontal size={18} /></button>
         </div>
         <div className="document-subtitle">
           <span>{folderName || "Chưa phân loại"}</span><span className="meta-dot" />{formatFileSize(document.size)}

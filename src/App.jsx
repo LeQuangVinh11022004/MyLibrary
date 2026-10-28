@@ -56,9 +56,11 @@ export default function App() {
           || getFolderPath(folder, library.folders).toLocaleLowerCase("vi").includes(query);
       });
     }
-    if (sort === "name") items.sort((a, b) => a.name.localeCompare(b.name, "vi"));
-    else if (sort === "oldest") items.sort((a, b) => a.addedAt - b.addedAt);
-    else items.sort((a, b) => b.addedAt - a.addedAt);
+    if (view !== "recent") {
+      if (sort === "name") items.sort((a, b) => a.name.localeCompare(b.name, "vi"));
+      else if (sort === "oldest") items.sort((a, b) => a.addedAt - b.addedAt);
+      else items.sort((a, b) => b.addedAt - a.addedAt);
+    }
     return items;
   }, [folderId, library.documents, library.folders, search, sort, view]);
 

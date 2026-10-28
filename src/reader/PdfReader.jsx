@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
 
 function clampPage(page, totalPages) {
   return Math.min(totalPages, Math.max(1, Number.isInteger(page) ? page : 1));
 }
 
-export function PdfReader({ blob, initialProgress, onProgress, onReady }) {
+export const PdfReader = forwardRef(function PdfReader({ blob, initialProgress, onProgress, onReady }, ref) {
   const stageRef = useRef(null);
   const canvasRef = useRef(null);
   const renderedRef = useRef(false);
@@ -21,6 +21,32 @@ export function PdfReader({ blob, initialProgress, onProgress, onReady }) {
   const [containerWidth, setContainerWidth] = useState(0);
   const [rendering, setRendering] = useState(true);
   const [error, setError] = useState("");
+
+  useImperativeHandle(ref, () => ({
+    goTo: (progress) => {
+      if (Number.isInteger(progress?.pageNumber)) {
+        setPageNumber(clampPage(progress.pageNumber, totalPages || progress.pageNumber));
+      }
+      if (Number.isFinite(progress?.zoom)) {
+        setZoom(Math.min(2, Math.max(0.75, progress.zoom)));
+      }
+    },
+    search: async (query) => {
+      if (!pdf || !totalPages) throw new Error("PDF chưa sẵn sàng để tìm kiếm.");
+      const cleanQuery = query.toLocaleLowerCase("vi");
+      for (let offset = 0; offset < totalPages; offset += 1) {
+        const page = await pdf.getPage(((pageNumber - 1 + offset) % totalPages) + 1);
+        const content = await page.getTextContent();
+        const text = content.items.map((item) => item.str || "").join(" ").toLocaleLowerCase("vi");
+        if (text.includes(cleanQuery)) {
+          const foundPage = ((pageNumber - 1 + offset) % totalPages) + 1;
+          setPageNumber(foundPage);
+          return `Tìm thấy ở trang ${foundPage} / ${totalPages}.`;
+        }
+      }
+      return "Không tìm thấy nội dung phù hợp trong PDF.";
+    },
+  }), [pageNumber, pdf, totalPages]);
 
   useEffect(() => {
     let active = true;
@@ -173,4 +199,4 @@ export function PdfReader({ blob, initialProgress, onProgress, onReady }) {
       </div>
     </div>
   );
-}
+});
