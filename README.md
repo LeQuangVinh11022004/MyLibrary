@@ -85,19 +85,22 @@ Không hệ thống nào đảm bảo website “không bị tấn công” ho�
 
 Mã ID là bí mật đăng nhập. Ai có mã đều có thể truy cập thư viện; nếu mất mã và không còn phiên đăng nhập thì không thể khôi phục tài khoản. Mã được lưu trên thiết bị hiện tại nếu chọn ghi nhớ; hãy sao chép hoặc tải mã để dùng trên thiết bị khác.
 
-## CI/CD GitHub Pages
+## CI/CD GitHub Pages và HTTPS
 
-Workflow nằm trong `.github/workflows/`:
+- `.github/workflows/ci.yml` chạy build và audit trên pull request, push lên `main`.
+- `.github/workflows/deploy.yml` build rồi deploy lên GitHub Pages khi push lên `main` hoặc chạy thủ công.
 
-- `ci.yml`: chạy `npm ci` và `npm run build` trên pull request và push lên `main`.
-- `deploy.yml`: build rồi deploy tự động lên GitHub Pages khi push lên `main` (hoặc chạy thủ công).
-
-Trong GitHub repository, thêm hai **Actions variables**:
+Trong GitHub repository, thêm các **Actions variables**:
 
 - `VITE_SUPABASE_URL`: Project URL.
 - `VITE_SUPABASE_ANON_KEY`: public anon/publishable key.
+- `VITE_FILE_HASH_REGISTRY_ADDRESS`: địa chỉ contract đã triển khai trên Sepolia (có thể để trống).
 
-Sau đó vào **Settings → Pages**, chọn source **GitHub Actions**. Vite đã cấu hình base path cho repository `MyLibrary`; workflow build website và đưa nội dung `dist/` lên Pages. Các giá trị này được nhúng vào mã trình duyệt nên chỉ dùng public anon key, còn quyền truy cập dữ liệu phải được giới hạn bằng RLS.
+Vào repository **Settings → Pages → Build and deployment → Source**, chọn **GitHub Actions**. Sau khi workflow hoàn tất, mở URL GitHub Pages được hiển thị trong phần Pages/Actions, thường là `https://lequangvinh11022004.github.io/MyLibrary/`.
+
+GitHub tự cấp và gia hạn TLS certificate cho domain `github.io`; không đưa file certificate/private key vào repository. HTTPS được hỗ trợ mặc định cho domain `github.io`. Trong **Settings → Pages**, bật **Enforce HTTPS** nếu tùy chọn này xuất hiện. Nếu sau này dùng custom domain, cần cấu hình DNS đúng và chờ GitHub xác minh/cấp certificate trước khi bật Enforce HTTPS.
+
+Các `VITE_*` values được nhúng vào mã trình duyệt nên chỉ dùng public anon key; quyền truy cập dữ liệu phải được giới hạn bằng RLS. Không đưa Supabase service-role key hoặc private key blockchain vào Actions variables hay client.
 
 ## Dữ liệu và giới hạn
 
