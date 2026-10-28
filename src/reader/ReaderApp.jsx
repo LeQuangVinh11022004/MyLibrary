@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, CloudDownload, Download, Fingerprint, LoaderCircle, NotebookPen, Search } from "lucide-react";
+import { ArrowLeft, BookmarkPlus, Check, CloudDownload, Download, Fingerprint, LoaderCircle, NotebookPen, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { formatFileSize } from "../lib/library-utils";
 import { anchorOrVerifyFileHash, isHashRegistryConfigured } from "../lib/blockchain";
@@ -52,7 +52,9 @@ export default function ReaderApp() {
   const [chapterCount, setChapterCount] = useState(1);
   const [toast, setToast] = useState("");
   const [annotations, setAnnotations] = useState([]);
+  const [annotationsAvailable, setAnnotationsAvailable] = useState(true);
   const [annotationsOpen, setAnnotationsOpen] = useState(false);
+  const [readerWarning, setReaderWarning] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [offlineAvailable, setOfflineAvailable] = useState(false);
   const [offlineCopyActive, setOfflineCopyActive] = useState(false);
@@ -163,6 +165,8 @@ export default function ReaderApp() {
   useEffect(() => {
     let active = true;
     setProgressReady(false);
+    setAnnotationsAvailable(true);
+    setReaderWarning("");
     progressIdentityRef.current = null;
     async function loadDocument() {
       try {
@@ -207,8 +211,13 @@ export default function ReaderApp() {
         }
         const { data: onlineAnnotations, error: annotationError } = await supabase.from("reader_annotations")
           .select("*").eq("document_id", document.id).order("created_at", { ascending: false });
-        if (annotationError && (!cachedDocument?.annotations || !isNetworkFailure(annotationError))) throw annotationError;
-        const annotationRows = annotationError ? cachedDocument.annotations : onlineAnnotations;
+        const missingAnnotationsTable = annotationError?.code === "PGRST205"
+          || /could not find the table ['"]?public\.reader_annotations|relation ['"]?public\.reader_annotations.*does not exist/i.test(annotationError?.message || "");
+        if (annotationError && !missingAnnotationsTable
+            && (!cachedDocument?.annotations || !isNetworkFailure(annotationError))) throw annotationError;
+        const annotationRows = missingAnnotationsTable
+          ? []
+          : annotationError ? cachedDocument.annotations : onlineAnnotations;
         const { data: downloadedBlob, error: downloadError } = await supabase.storage.from("library-files").download(document.storage_path);
         if (downloadError && (!cachedDocument?.blob || !isNetworkFailure(downloadError))) throw downloadError;
         const fileBlob = downloadError ? cachedDocument.blob : downloadedBlob;
@@ -235,6 +244,11 @@ export default function ReaderApp() {
           location: row.location,
           createdAt: row.created_at,
         })));
+        if (missingAnnotationsTable) {
+          setAnnotationsAvailable(false);
+          setReaderWarning("Thiếu bảng reader_annotations trên Supabase. Sách vẫn mở được, nhưng dấu trang và ghi chú chưa dùng được. Chạy migration supabase/migrations/20261027000000_reader_features.sql trong Supabase SQL Editor.");
+          console.error("Thiếu bảng public.reader_annotations. Hãy chạy migration Supabase cho tính năng reader.");
+        }
         setOfflineAvailable(Boolean(cachedDocument?.blob));
         setOfflineCopyActive(Boolean(downloadError));
         setLoading(false);
@@ -326,6 +340,9 @@ export default function ReaderApp() {
 
   async function createAnnotation(kind, body = "") {
     if (!item || !user) throw new Error("Cần đăng nhập để lưu dấu trang và ghi chú.");
+    if (!annotationsAvailable) {
+      throw new Error("Cần chạy migration supabase/migrations/20261027000000_reader_features.sql trong Supabase SQL Editor trước khi dùng dấu trang và ghi chú.");
+    }
     const { data, error: insertError } = await supabase.from("reader_annotations")
       .insert({
         owner_id: user.id,
@@ -347,6 +364,10 @@ export default function ReaderApp() {
   }
 
   async function deleteAnnotation(id) {
+    if (!annotationsAvailable) {
+      notify("Cần chạy migration Supabase để quản lý dấu trang và ghi chú.");
+      return;
+    }
     const { error: deleteError } = await supabase.from("reader_annotations").delete().eq("id", id);
     if (deleteError) {
       console.error("Không thể xóa dấu trang hoặc ghi chú.", deleteError);
@@ -459,6 +480,7 @@ export default function ReaderApp() {
           {(isPdf || isBook || isText) && <button className={`reader-header-button${searchOpen ? " is-read" : ""}`} type="button" onClick={() => { setSearchOpen((open) => !open); setAnnotationsOpen(false); }} disabled={!readerReady && !isText} aria-label="Tìm trong tài liệu" title="Tìm trong tài liệu"><Search size={18} /></button>}
         </div>
       </header>
+      {readerWarning && <div className="reader-feature-warning" role="status">{readerWarning}</div>}
       {isBook && item && (
         <ReaderToolbar
           location={isAzw3 ? `Chương ${chapterIndex + 1} / ${chapterCount}` : location}
