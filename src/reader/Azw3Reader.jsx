@@ -1,6 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-
-const PARSER_URL = "https://cdn.jsdelivr.net/npm/@lingo-reader/mobi-parser@0.4.6/+esm";
+import { initKf8File } from "@lingo-reader/mobi-parser";
 
 function sanitizeHtml(html) {
   const parsed = new DOMParser().parseFromString(html, "text/html");
@@ -57,9 +56,7 @@ export const Azw3Reader = forwardRef(function Azw3Reader({
     let active = true;
     let book;
     async function openBook() {
-      const parser = await import(/* @vite-ignore */ PARSER_URL);
-      if (typeof parser.initKf8File !== "function") throw new Error("Không tải được trình đọc AZW3.");
-      book = await parser.initKf8File(new Uint8Array(await blob.arrayBuffer()));
+      book = await initKf8File(new Uint8Array(await blob.arrayBuffer()));
       const spine = book.getSpine();
       if (!spine.length) throw new Error("Sách AZW3 không có nội dung để đọc.");
       if (!active) {

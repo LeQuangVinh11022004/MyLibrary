@@ -1,5 +1,5 @@
 const PROGRESS_PREFIX = "trang-sach:reading-progress";
-const FORMATS = new Set(["epub", "pdf", "azw3"]);
+const FORMATS = new Set(["epub", "pdf", "azw3", "text"]);
 
 function progressKey(userId, documentId) {
   return `${PROGRESS_PREFIX}:${encodeURIComponent(userId)}:${encodeURIComponent(documentId)}`;

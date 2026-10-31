@@ -9,6 +9,10 @@ import {
   STORAGE_BUCKET,
 } from "../lib/library-utils";
 
+const DOCUMENT_COLUMNS = "id,name,content_type,size_bytes,added_at,last_opened,favorite,status,folder_id,relative_path,storage_path";
+const FOLDER_COLUMNS = "id,name,parent_id,created_at";
+const HASH_QUERY_BATCH_SIZE = 100;
+
 function fileExtension(name) {
   return name.match(/\.([a-z0-9]{1,10})$/i)?.[0]?.toLowerCase() || "";
 }
@@ -42,8 +46,10 @@ export function useLibrary(user, notify) {
     setLoading(true);
     try {
       const [documentResult, folderResult] = await Promise.all([
-        supabase.from("library_documents").select("*").order("added_at", { ascending: false }),
-        supabase.from("library_folders").select("*").order("created_at", { ascending: true }),
+        supabase.from("library_documents").select(DOCUMENT_COLUMNS)
+          .eq("owner_id", user.id).order("added_at", { ascending: false }),
+        supabase.from("library_folders").select(FOLDER_COLUMNS)
+          .eq("owner_id", user.id).order("created_at", { ascending: true }),
       ]);
       if (documentResult.error) throw documentResult.error;
       if (folderResult.error) throw folderResult.error;
@@ -69,7 +75,7 @@ export function useLibrary(user, notify) {
     if (existing) return existing.id;
     const { data, error } = await supabase.from("library_folders")
       .insert({ owner_id: user.id, name, parent_id: parentId })
-      .select("*").single();
+      .select(FOLDER_COLUMNS).single();
     if (error) throw error;
     const folder = mapFolder(data);
     cache.push(folder);
@@ -80,10 +86,9 @@ export function useLibrary(user, notify) {
   const createFolder = useCallback(async (name, parentId) => {
     if (!supabase || !user) throw new Error("Đăng nhập trước khi tạo thư mục.");
     const folderId = await ensureFolder(name, parentId);
-    await reload();
     notify(`Đã tạo thư mục “${name}”.`);
     return folderId;
-  }, [ensureFolder, notify, reload, user]);
+  }, [ensureFolder, notify, user]);
 
   const uploadFiles = useCallback(async (fileList, folderId, isFolderUpload = false) => {
     if (!supabase || !user) throw new Error("Đăng nhập trước khi tải tài liệu lên.");
@@ -97,6 +102,7 @@ export function useLibrary(user, notify) {
     const failures = [];
     setUploading(true);
     try {
+      const preparedFiles = [];
       for (const file of accepted) {
         let targetFolderId = folderId;
         const relativePath = file.webkitRelativePath || "";
@@ -106,13 +112,40 @@ export function useLibrary(user, notify) {
             targetFolderId = await ensureFolder(rootFolder, folderId, folderCache);
           }
           const contentSha256 = await digestFile(file);
-          const { data: duplicate, error: duplicateError } = await supabase.from("library_documents")
-            .select("id").eq("owner_id", user.id).eq("content_sha256", contentSha256).maybeSingle();
-          if (duplicateError) throw duplicateError;
-          if (duplicate) {
-            duplicates += 1;
-            continue;
-          }
+          preparedFiles.push({ file, targetFolderId, relativePath, contentSha256 });
+        } catch (error) {
+          console.error(`Không thể chuẩn bị ${file.name} để tải lên.`, error);
+          failures.push(`${file.name}: ${getUploadErrorMessage(error)}`);
+        }
+      }
+
+      const existingHashes = new Set();
+      const uniqueHashes = [...new Set(preparedFiles.map(({ contentSha256 }) => contentSha256))];
+      try {
+        for (let offset = 0; offset < uniqueHashes.length; offset += HASH_QUERY_BATCH_SIZE) {
+          const hashBatch = uniqueHashes.slice(offset, offset + HASH_QUERY_BATCH_SIZE);
+          const { data, error } = await supabase.from("library_documents")
+            .select("content_sha256")
+            .eq("owner_id", user.id)
+            .in("content_sha256", hashBatch);
+          if (error) throw error;
+          for (const row of data) existingHashes.add(row.content_sha256);
+        }
+      } catch (error) {
+        console.error("Không thể kiểm tra tệp trùng trên Supabase.", error);
+        for (const { file } of preparedFiles) {
+          failures.push(`${file.name}: ${getUploadErrorMessage(error)}`);
+        }
+        preparedFiles.length = 0;
+      }
+
+      const uploadedHashes = new Set();
+      for (const { file, targetFolderId, relativePath, contentSha256 } of preparedFiles) {
+        if (existingHashes.has(contentSha256) || uploadedHashes.has(contentSha256)) {
+          duplicates += 1;
+          continue;
+        }
+        try {
           const id = crypto.randomUUID();
           const storagePath = `${user.id}/${id}${fileExtension(file.name)}`;
           const type = contentType(file);
@@ -135,11 +168,13 @@ export function useLibrary(user, notify) {
             if (cleanupError) throw new Error(`${error.message}; không thể dọn file tải dở: ${cleanupError.message}`);
             if (error.code === "23505") {
               duplicates += 1;
+              uploadedHashes.add(contentSha256);
               continue;
             }
             throw error;
           }
           uploaded += 1;
+          uploadedHashes.add(contentSha256);
         } catch (error) {
           console.error(`Không thể tải lên ${file.name}.`, error);
           failures.push(`${file.name}: ${getUploadErrorMessage(error)}`);

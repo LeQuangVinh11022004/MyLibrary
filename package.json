@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@lingo-reader/mobi-parser": "0.4.6",
     "@supabase/supabase-js": "^2.57.0",
     "epubjs": "^0.3.93",
     "ethers": "^6.17.0",

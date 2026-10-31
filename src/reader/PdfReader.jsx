@@ -111,7 +111,7 @@ export const PdfReader = forwardRef(function PdfReader({ blob, initialProgress, 
         const baseViewport = page.getViewport({ scale: 1 });
         const scale = (Math.max(200, containerWidth - 32) / baseViewport.width) * zoom;
         const viewport = page.getViewport({ scale });
-        const pixelRatio = window.devicePixelRatio || 1;
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
         const canvas = canvasRef.current;
         const context = canvas.getContext("2d", { alpha: false });
         canvas.width = Math.ceil(viewport.width * pixelRatio);
@@ -195,7 +195,11 @@ export const PdfReader = forwardRef(function PdfReader({ blob, initialProgress, 
         onTouchCancel={() => { touchStartRef.current = null; }}
       >
         {rendering && <div className="pdf-page-loading">Đang tải trang {pageNumber}…</div>}
-        <canvas ref={canvasRef} className="pdf-page-canvas" aria-label={`Trang ${pageNumber} trên ${totalPages}`} />
+        <canvas
+          ref={canvasRef}
+          className={`pdf-page-canvas${rendering ? " is-rendering" : ""}`}
+          aria-label={`Trang ${pageNumber} trên ${totalPages}`}
+        />
       </div>
     </div>
   );

@@ -57,9 +57,11 @@ Giới hạn Nginx là lớp bảo vệ cơ bản cho container, **không phải
 
 ## Mã hóa và dữ liệu riêng tư
 
-Ứng dụng dùng TLS tới Supabase, private Storage bucket và RLS theo `auth.uid()`. Database/storage at-rest được nhà cung cấp Supabase quản lý; xác minh trạng thái, phạm vi và chính sách lưu trữ trong dashboard/tài liệu của project. Đây **không phải mã hóa đầu cuối**: Supabase vẫn xử lý dữ liệu sau khi xác thực. Không tự mã hóa dữ liệu ở frontend theo mặc định vì sẽ làm tìm kiếm, khôi phục tài khoản và xử lý nội dung sách phức tạp hơn. Không lưu khóa bí mật hoặc service-role key trong Vite variables, Docker image hay trình duyệt.
+Ứng dụng dùng TLS tới Supabase, private Storage bucket và RLS theo `auth.uid()`. Schema thu hồi quyền bảng khỏi role `anon`/`PUBLIC` và chỉ cấp cho `authenticated`; RLS tiếp tục giới hạn từng hàng theo chủ sở hữu. Database/storage at-rest được nhà cung cấp Supabase quản lý; xác minh trạng thái, phạm vi và chính sách lưu trữ trong dashboard/tài liệu của project. Đây **không phải mã hóa đầu cuối**: Supabase vẫn xử lý dữ liệu sau khi xác thực. Không tự mã hóa dữ liệu ở frontend theo mặc định vì sẽ làm tìm kiếm, khôi phục tài khoản và xử lý nội dung sách phức tạp hơn. Không lưu khóa bí mật hoặc service-role key trong Vite variables, Docker image hay trình duyệt.
 
 Tiến độ đọc đồng bộ qua cột `reading_progress`; nếu mất mạng, reader tiếp tục lưu tạm tiến độ trên thiết bị và thử đồng bộ lại khi mạng hoạt động. Dấu trang và ghi chú được lưu trong `reader_annotations` với RLS theo chủ sở hữu. Bản offline được lưu trong IndexedDB của trình duyệt và **không có mã hóa ứng dụng riêng**; chỉ bật trên thiết bị đáng tin cậy, xóa bản offline trước khi chia sẻ thiết bị.
+
+Production build thêm Content Security Policy (CSP) và Referrer Policy vào cả hai trang HTML. GitHub Pages không cho cấu hình tùy ý HTTP response headers; CSP dạng meta giúp hạn chế nguồn script, nhưng không thay thế được `frame-ancestors`/`X-Frame-Options`. Docker Nginx có thể gửi các header đó. Parser AZW3 được bundle từ dependency đã pin thay vì tải mã chạy trực tiếp từ CDN. Dependabot theo dõi cập nhật npm và GitHub Actions hàng tuần.
 
 ## Blockchain proof-of-integrity
 
@@ -78,7 +80,7 @@ Không hệ thống nào đảm bảo website “không bị tấn công” ho�
 ## Cấu hình Supabase
 
 1. Tạo project Supabase trên gói Free.
-2. Với project mới, dùng nội dung `supabase-schema.sql` trong **SQL Editor** để tạo bảng, RLS, Storage bucket và policies. Với project đã có dữ liệu, chạy migration `supabase/migrations/20261027000000_reader_features.sql` trong SQL Editor để thêm tiến độ đồng bộ và dấu trang/ghi chú.
+2. Với project mới, dùng nội dung `supabase-schema.sql` trong **SQL Editor** để tạo bảng, RLS, Storage bucket và policies. Với project đã có dữ liệu, chạy migrations trong `supabase/migrations/` theo thứ tự thời gian. Nếu migration reader ngày 27 đã chạy, chạy thêm `20261028000000_lock_down_anon_table_grants.sql` để thu hồi quyền bảng khỏi role `anon`/`PUBLIC`; thao tác này chỉ giữ quyền truy cập cho người dùng đã xác thực.
 3. Trong **Authentication → Settings → User Signups**, bật đăng ký khi tạo mã ID. Có thể tắt lại sau đó.
 4. Bật **Email provider** và tắt **Confirm email**. Website chỉ yêu cầu mã ID; email tổng hợp chỉ được dùng nội bộ cho Supabase Auth.
 5. Thêm URL local và URL website triển khai vào **Authentication → URL Configuration → Redirect URLs**.
@@ -108,7 +110,7 @@ Các `VITE_*` values được nhúng vào mã trình duyệt nên chỉ dùng pu
 - Hỗ trợ tải nhiều file hoặc cả thư mục, giới hạn client/storage 50 MB mỗi file.
 - Tệp trùng nội dung trong cùng tài khoản được bỏ qua bằng SHA-256.
 - Hỗ trợ xem trực tiếp PDF, EPUB, AZW3 không DRM, hình ảnh và một số file văn bản. Loại khác có thể tải xuống để mở bằng ứng dụng phù hợp.
-- Tiến độ PDF (trang), EPUB (vị trí CFI) và AZW3 (chương) được lưu tại Supabase để đồng bộ giữa các thiết bị, đồng thời giữ bản tạm cục bộ để phục hồi khi mất mạng.
+- Thanh tiến độ reader hiển thị phần trăm và vị trí: PDF theo trang, EPUB theo vị trí sách, AZW3 theo tỷ lệ chương đã đọc, văn bản theo vị trí cuộn. Tiến độ được đồng bộ tại Supabase, giữ tạm cục bộ khi mất mạng.
 - Có thể lưu dấu trang, ghi chú, tìm nội dung trong PDF/EPUB/AZW3 và văn bản thuần; tìm kiếm PDF chỉ chuyển tới trang có kết quả, không tô sáng đoạn văn.
 - Có thể chủ động lưu file vào IndexedDB để đọc offline trên thiết bị hiện tại. Bản offline không được mã hóa riêng bởi ứng dụng.
 - Reader tối ưu cho điện thoại và tablet: trang PDF vừa chiều rộng, điều khiển chạm/swipe, EPUB/AZW3 hỗ trợ vuốt chuyển trang/chương, cùng tùy chỉnh cỡ chữ và nền sáng/sepia/tối.

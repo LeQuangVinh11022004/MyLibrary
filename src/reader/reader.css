@@ -14,10 +14,20 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
 .reader-book-heading > span { color: #92978d; font-size: 9px; letter-spacing: .5px; }
 .reader-header-actions { display: flex; justify-content: flex-end; gap: 7px; }
 .reader-header-button { width: 35px; height: 35px; display: grid; place-items: center; border: 1px solid #e6e5dc; border-radius: 50%; background: #fffefa; color: #667260; cursor: pointer; }
+.reader-header-button, .reader-control { transition: transform .16s ease, background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease; }
+.reader-header-button:hover:not(:disabled), .reader-control:hover:not(:disabled) { transform: translateY(-1px); }
+.reader-header-button:active:not(:disabled), .reader-control:active:not(:disabled) { transform: scale(.97); }
 .reader-feature-warning { position: relative; z-index: 2; padding: 9px 16px; border-bottom: 1px solid #e7d8b6; background: #fbf5e8; color: #756343; font-size: 11px; line-height: 1.5; }
 .reader-header-button:hover:not(:disabled), .reader-header-button.is-read { border-color: #cad6c4; background: #edf3e9; color: var(--green); }
 .reader-header-button:disabled { opacity: .45; cursor: not-allowed; }
+.reader-progress-strip { position: relative; z-index: 2; display: grid; gap: 6px; padding: 7px clamp(14px, 3vw, 45px) 8px; border-bottom: 1px solid #e7e4da; background: #fbfaf6; animation: reader-ui-in .22s ease-out both; }
+.reader-progress-copy { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #747d70; font-size: 10px; line-height: 1.2; }
+.reader-progress-copy strong { color: #405940; font-size: 11px; font-variant-numeric: tabular-nums; }
+.reader-progress-track { position: relative; height: 5px; overflow: hidden; border-radius: 99px; background: #e8e9e1; }
+.reader-progress-track > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #6e956a, #3f6549); transition: width .32s cubic-bezier(.2,.8,.2,1); }
+.reader-progress-track.is-indeterminate > span { width: 32% !important; animation: progress-loading 1.15s ease-in-out infinite alternate; }
 .reader-toolbar { position: relative; z-index: 2; min-height: 51px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px clamp(14px, 3vw, 45px); border-bottom: 1px solid #e7e4da; background: #fbfaf6f0; }
+.reader-toolbar { animation: reader-ui-in .22s ease-out both; }
 .reader-page-nav, .reader-settings { display: flex; align-items: center; gap: 6px; }
 .reader-page-nav { flex: 1; justify-content: center; }
 .reader-settings { min-width: 210px; justify-content: flex-end; }
@@ -38,12 +48,13 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
 .pdf-control-spacer { width: 12px; }
 .pdf-page-stage { position: relative; min-height: 0; flex: 1; overflow: auto; display: flex; justify-content: center; padding: 8px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 .pdf-page-stage.is-zoomed { justify-content: flex-start; }
-.pdf-page-canvas { flex: 0 0 auto; max-width: none; align-self: flex-start; background: #fff; box-shadow: 0 3px 18px #292d281c; }
+.pdf-page-canvas { flex: 0 0 auto; max-width: none; align-self: flex-start; background: #fff; box-shadow: 0 3px 18px #292d281c; transition: opacity .16s ease; }
+.pdf-page-canvas.is-rendering { opacity: .55; }
 .pdf-page-loading { position: absolute; z-index: 1; top: 12px; left: 50%; padding: 7px 11px; border: 1px solid #e7e4da; border-radius: 99px; background: #fffefae8; color: #657060; font-size: 11px; transform: translateX(-50%); pointer-events: none; }
 .pdf-reader-error { max-width: 600px; margin: auto; padding: 24px; color: #8b443b; text-align: center; }
 .image-reader { width: 100%; height: 100%; display: grid; place-items: center; overflow: auto; padding: 20px; }
 .image-reader img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.text-reader { width: min(900px, 100%); height: 100%; overflow: auto; margin: 0 auto; padding: clamp(20px, 6vw, 70px); background: var(--reader-page); color: var(--reader-ink); font: 16px/1.8 "Literata", Georgia, serif; white-space: pre-wrap; overflow-wrap: anywhere; }
+.text-reader { width: min(900px, 100%); height: 100%; overflow: auto; margin: 0 auto; padding: clamp(20px, 6vw, 70px); background: var(--reader-page); color: var(--reader-ink); font: 16px/1.8 "Literata", Georgia, serif; white-space: pre-wrap; overflow-wrap: anywhere; scrollbar-gutter: stable; }
 .epub-canvas { width: min(1200px, 100%); height: 100%; margin: 0 auto; background: var(--reader-page); color: var(--reader-ink); }
 .epub-page { width: 100%; height: 100%; }
 .epub-page iframe { background: var(--reader-page) !important; }
@@ -85,6 +96,8 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
 .reader-annotation-jump > p { overflow-wrap: anywhere; margin: 4px 0 0; color: #737a70; font-size: 11px; line-height: 1.5; }
 .reader-offline-indicator { position: absolute; z-index: 4; left: 16px; bottom: 16px; padding: 8px 11px; border: 1px solid #dce6d7; border-radius: 8px; background: #f5f8f2; color: #50684c; font-size: 10px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes reader-ui-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes progress-loading { from { transform: translateX(-40%); } to { transform: translateX(250%); } }
 @media (max-width: 600px) {
   .reader-header { min-height: 56px; grid-template-columns: auto minmax(0, 1fr) auto; gap: 7px; padding: 0 8px; }
   .reader-back { gap: 4px; font-size: 9px; }
@@ -94,6 +107,9 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
   .reader-header-actions { gap: 3px; }
   .reader-header-button { width: 30px; height: 30px; }
   .reader-annotations, .reader-search-panel { top: 108px; right: 10px; width: calc(100% - 20px); max-height: calc(100dvh - 126px); }
+  .reader-progress-strip { gap: 5px; padding: 6px 12px 7px; }
+  .reader-progress-copy { font-size: 9px; }
+  .reader-progress-copy strong { font-size: 10px; }
   .reader-toolbar { min-height: 49px; gap: 3px; padding: 4px 6px; }
   .reader-page-nav, .reader-settings { gap: 3px; }
   .reader-settings { min-width: 0; }
@@ -109,6 +125,9 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
   .pdf-control-spacer { width: 2px; }
   .pdf-page-stage { padding: 6px; }
   .reader-error { padding: 23px 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 @media (min-width: 601px) and (max-width: 900px) {
   .reader-toolbar { padding-right: 14px; padding-left: 14px; }

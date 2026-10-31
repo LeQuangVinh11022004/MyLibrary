@@ -67,6 +67,10 @@ export default function ReaderApp() {
   const azw3Ref = useRef(null);
   const textReaderRef = useRef(null);
   const toastTimer = useRef(null);
+  const textProgressFrameRef = useRef(0);
+  const textProgressTargetRef = useRef(null);
+  const textProgressPercentRef = useRef(0);
+  const textRestoredDocumentRef = useRef(null);
   const progressIdentityRef = useRef(null);
   const progressWriteWarningRef = useRef(false);
   const progressSyncWarningRef = useRef(false);
@@ -80,6 +84,40 @@ export default function ReaderApp() {
   const isText = item?.content_type?.startsWith("text/")
     || ["txt", "md", "csv", "json", "log"].includes(extension);
   const objectUrl = useMemo(() => (blob && isImage ? URL.createObjectURL(blob) : ""), [blob, isImage]);
+  const progressDetails = (() => {
+    if (isPdf) {
+      const page = readingProgress?.format === "pdf" ? readingProgress.pageNumber : 0;
+      const total = readingProgress?.format === "pdf" ? readingProgress.totalPages : 0;
+      if (!Number.isFinite(total) || total < 1) return { percent: null, detail: "Đang tính tiến độ PDF…" };
+      const percent = Math.min(100, Math.max(0, Math.round((page / total) * 100)));
+      return { percent, detail: `Trang ${page} / ${total}` };
+    }
+    if (isEpub) {
+      if (readingProgress?.format !== "epub" || !Number.isFinite(readingProgress.percentage)) {
+        return { percent: null, detail: "Đang xác định vị trí trong sách…" };
+      }
+      const percent = Math.min(100, Math.max(0, Math.round(readingProgress.percentage * 100)));
+      return {
+        percent,
+        detail: readingProgress.pageNumber ? `Vị trí trong sách · trang ${readingProgress.pageNumber}` : "Vị trí trong sách",
+      };
+    }
+    if (isAzw3) {
+      const total = readingProgress?.format === "azw3" ? readingProgress.totalChapters : chapterCount;
+      const current = readingProgress?.format === "azw3" ? readingProgress.chapterIndex + 1 : chapterIndex + 1;
+      if (!Number.isFinite(total) || total < 1) return { percent: null, detail: "Đang tính số chương…" };
+      const percent = Math.min(100, Math.max(0, Math.round((current / total) * 100)));
+      return { percent, detail: `Chương ${current} / ${total}` };
+    }
+    if (isText) {
+      if (readingProgress?.format !== "text" || !Number.isFinite(readingProgress.percentage)) {
+        return { percent: 0, detail: "Văn bản · bắt đầu" };
+      }
+      const percent = Math.min(100, Math.max(0, Math.round(readingProgress.percentage * 100)));
+      return { percent, detail: "Vị trí trong văn bản" };
+    }
+    return null;
+  })();
 
   const notify = useCallback((message) => {
     setToast(message);
@@ -165,6 +203,7 @@ export default function ReaderApp() {
   useEffect(() => {
     let active = true;
     setProgressReady(false);
+    textRestoredDocumentRef.current = null;
     setAnnotationsAvailable(true);
     setReaderWarning("");
     progressIdentityRef.current = null;
@@ -196,7 +235,8 @@ export default function ReaderApp() {
           console.warn("Không thể kiểm tra bản offline.", cacheError);
         }
         const { data: onlineDocument, error: documentError } = await supabase.from("library_documents")
-          .select("*").eq("id", id).single();
+          .select("id,name,content_type,size_bytes,storage_path,status,reading_progress")
+          .eq("id", id).eq("owner_id", currentUser.id).single();
         if (documentError && (!cachedDocument?.metadata || !isNetworkFailure(documentError))) throw documentError;
         const document = documentError ? cachedDocument.metadata : onlineDocument;
         const ext = getExtension(document.name);
@@ -209,8 +249,19 @@ export default function ReaderApp() {
             && !isImageFile && !isTextFile) {
           throw new Error("Định dạng này chưa xem trực tiếp được. Hãy tải xuống để mở bằng ứng dụng phù hợp.");
         }
-        const { data: onlineAnnotations, error: annotationError } = await supabase.from("reader_annotations")
-          .select("*").eq("document_id", document.id).order("created_at", { ascending: false });
+        const cachedBlobMatches = Boolean(cachedDocument?.blob
+          && cachedDocument.metadata?.storage_path === document.storage_path
+          && Number(cachedDocument.metadata?.size_bytes) === Number(document.size_bytes));
+        const [annotationResult, downloadResult] = await Promise.all([
+          supabase.from("reader_annotations")
+            .select("id,kind,body,location,created_at")
+            .eq("owner_id", currentUser.id).eq("document_id", document.id)
+            .order("created_at", { ascending: false }),
+          cachedBlobMatches
+            ? Promise.resolve({ data: null, error: null })
+            : supabase.storage.from("library-files").download(document.storage_path),
+        ]);
+        const { data: onlineAnnotations, error: annotationError } = annotationResult;
         const missingAnnotationsTable = annotationError?.code === "PGRST205"
           || /could not find the table ['"]?public\.reader_annotations|relation ['"]?public\.reader_annotations.*does not exist/i.test(annotationError?.message || "");
         if (annotationError && !missingAnnotationsTable
@@ -218,11 +269,11 @@ export default function ReaderApp() {
         const annotationRows = missingAnnotationsTable
           ? []
           : annotationError ? cachedDocument.annotations : onlineAnnotations;
-        const { data: downloadedBlob, error: downloadError } = await supabase.storage.from("library-files").download(document.storage_path);
-        if (downloadError && (!cachedDocument?.blob || !isNetworkFailure(downloadError))) throw downloadError;
-        const fileBlob = downloadError ? cachedDocument.blob : downloadedBlob;
+        const { data: downloadedBlob, error: downloadError } = downloadResult;
+        if (downloadError && (!cachedBlobMatches || !isNetworkFailure(downloadError))) throw downloadError;
+        const fileBlob = cachedBlobMatches ? cachedDocument.blob : downloadError ? cachedDocument.blob : downloadedBlob;
         if (!active) return;
-        const validProgress = (progress) => progress && ["epub", "pdf", "azw3"].includes(progress.format);
+        const validProgress = (progress) => progress && ["epub", "pdf", "azw3", "text"].includes(progress.format);
         const localProgress = loadReadingProgress(currentUser.id, document.id);
         const storedProgress = validProgress(document.reading_progress) ? document.reading_progress : null;
         const savedProgress = validProgress(localProgress)
@@ -249,10 +300,10 @@ export default function ReaderApp() {
           setReaderWarning("Thiếu bảng reader_annotations trên Supabase. Sách vẫn mở được, nhưng dấu trang và ghi chú chưa dùng được. Chạy migration supabase/migrations/20261027000000_reader_features.sql trong Supabase SQL Editor.");
           console.error("Thiếu bảng public.reader_annotations. Hãy chạy migration Supabase cho tính năng reader.");
         }
-        setOfflineAvailable(Boolean(cachedDocument?.blob));
-        setOfflineCopyActive(Boolean(downloadError));
+        setOfflineAvailable(cachedBlobMatches);
+        setOfflineCopyActive(cachedBlobMatches || Boolean(downloadError));
         setLoading(false);
-        if (!downloadError) {
+        if (!documentError) {
           const { error: updateError } = await supabase.from("library_documents")
             .update({ last_opened: new Date().toISOString() }).eq("id", document.id);
           if (updateError) {
@@ -282,6 +333,39 @@ export default function ReaderApp() {
     }
     return () => { active = false; };
   }, [blob, isText]);
+
+  useEffect(() => {
+    if (!isText || !progressReady || !item?.id || !textContent
+        || textRestoredDocumentRef.current === item.id || !textReaderRef.current) return;
+    const reader = textReaderRef.current;
+    const percentage = readingProgress?.format === "text"
+      ? Math.min(1, Math.max(0, readingProgress.percentage || 0))
+      : 0;
+    reader.scrollTop = percentage * Math.max(0, reader.scrollHeight - reader.clientHeight);
+    textProgressPercentRef.current = percentage;
+    textRestoredDocumentRef.current = item.id;
+  }, [isText, item?.id, progressReady, readingProgress, textContent]);
+
+  const handleTextScroll = useCallback((event) => {
+    textProgressTargetRef.current = event.currentTarget;
+    if (textProgressFrameRef.current) return;
+    textProgressFrameRef.current = window.requestAnimationFrame(() => {
+      textProgressFrameRef.current = 0;
+      const reader = textProgressTargetRef.current;
+      if (!reader) return;
+      const maxScroll = reader.scrollHeight - reader.clientHeight;
+      const percentage = maxScroll > 0 ? reader.scrollTop / maxScroll : 0;
+      if (Math.abs(percentage - textProgressPercentRef.current) < 0.01) return;
+      textProgressPercentRef.current = percentage;
+      handleProgress({ format: "text", percentage });
+    });
+  }, [handleProgress]);
+
+  useEffect(() => () => {
+    if (textProgressFrameRef.current) {
+      window.cancelAnimationFrame(textProgressFrameRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -492,12 +576,33 @@ export default function ReaderApp() {
           onTheme={changeTheme}
         />
       )}
+      {item && progressDetails && (
+        <div className="reader-progress-strip" aria-label="Tiến độ đọc">
+          <div className="reader-progress-copy">
+            <span>{progressDetails.detail}</span>
+            <strong>{progressDetails.percent === null ? "…" : `${progressDetails.percent}%`}</strong>
+          </div>
+          <div
+            className={`reader-progress-track${progressDetails.percent === null ? " is-indeterminate" : ""}`}
+            role="progressbar"
+            aria-label="Tiến độ đọc"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            {...(progressDetails.percent === null ? {} : { "aria-valuenow": progressDetails.percent })}
+            aria-valuetext={progressDetails.percent === null
+              ? progressDetails.detail
+              : `${progressDetails.detail}, ${progressDetails.percent}%`}
+          >
+            <span style={{ width: `${progressDetails.percent ?? 0}%` }} />
+          </div>
+        </div>
+      )}
       <section className={`reader-viewport${isPdf ? " pdf-viewport" : ""}`}>
         {(loading || (blob && progressReady && (isPdf || isBook) && !readerReady && !error)) && <div className="reader-loading"><LoaderCircle size={26} className="spin" /><span>Đang mở tài liệu từ thư viện…</span></div>}
         {error && <div className="reader-error"><span className="reader-error-icon">!</span><h2>Chưa mở được tài liệu</h2><p>{error}</p><a className="reader-return-link" href={backLink}>Quay về thư viện</a></div>}
         {blob && progressReady && isPdf && <PdfReader ref={pdfRef} blob={blob} initialProgress={readingProgress} onProgress={handleProgress} onReady={handleReady} />}
         {blob && isImage && <div className="image-reader"><img src={objectUrl} alt={item.name} /></div>}
-        {blob && isText && <pre ref={textReaderRef} className="text-reader">{textContent}</pre>}
+        {blob && isText && <pre ref={textReaderRef} className="text-reader" onScroll={handleTextScroll}>{textContent}</pre>}
         {blob && progressReady && isEpub && (
           <Suspense fallback={null}>
             <EpubReader ref={epubRef} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} onLocation={handleLocation} onProgress={handleProgress} onReady={handleReady} />
