@@ -38,7 +38,7 @@ jobs:
           VITE_FILE_HASH_REGISTRY_ADDRESS: ${{ vars.VITE_FILE_HASH_REGISTRY_ADDRESS }}
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
