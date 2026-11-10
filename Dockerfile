@@ -13,6 +13,17 @@ ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 ENV VITE_FILE_HASH_REGISTRY_ADDRESS=$VITE_FILE_HASH_REGISTRY_ADDRESS
 RUN npm run build
 
+FROM node:22-alpine AS api
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY server ./server
+ENV NODE_ENV=production PORT=3001
+USER node
+EXPOSE 3001
+CMD ["node", "server/index.js"]
+
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 
 COPY docker/nginx.conf /etc/nginx/nginx.conf

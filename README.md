@@ -1,117 +1,126 @@
-# Trang Sách
+# Trang Sách (MyLibrary)
 
-Thư viện cá nhân để lưu sách và tài liệu lên Supabase, sắp xếp theo thư mục, tìm kiếm, đánh dấu yêu thích/đã đọc và mở PDF, EPUB hoặc AZW3 trong trình đọc riêng toàn màn hình.
+A personal, cloud-backed digital library for the web. Organize books and study materials into folders, search your collection, mark favorites and read status, and read PDF, EPUB, and AZW3 files directly in the browser with a full-screen reader that remembers where you stopped.
 
-## Cấu trúc mã nguồn
+## Features
 
-- `src/App.jsx`: ghép giao diện trang thư viện và điều phối trạng thái.
-- `src/components/`: sidebar, thanh công cụ, thẻ tài liệu, danh sách, hộp thoại đăng nhập/thư mục và toast.
-- `src/hooks/useAuth.js`: phiên Supabase Auth và đăng nhập bằng mã ID.
-- `src/hooks/useLibrary.js`: đọc/ghi thư viện, upload file/thư mục và thao tác tài liệu.
-- `src/lib/`: khởi tạo Supabase và hàm định dạng/ánh xạ dữ liệu.
-- `src/reader/`: trang đọc riêng, bộ đọc EPUB/PDF/AZW3 và cache tiến độ đọc.
-- `src/styles.css`, `src/reader/reader.css`: style riêng cho từng màn hình.
-- `index.html`, `reader.html`: hai entry point do Vite build.
+- **Library management**: folders, search, favorites, and read status.
+- **Uploads**: single files, multiple files, or whole folders (up to 50 MB per file), with duplicate detection by SHA-256.
+- **Built-in reader**: PDF, EPUB, AZW3 (non-DRM), images, and common text files.
+- **Reading progress**: synced across devices through Supabase; kept locally when offline.
+- **Bookmarks, notes, and in-document search** for PDF, EPUB, AZW3, and plain text.
+- **Offline reading**: optionally keep files in browser storage (IndexedDB) on the current device.
+- **Responsive design**: optimized for phones and tablets, with touch and swipe navigation and adjustable font size and themes (light, sepia, dark).
+- **Optional proof of integrity**: anchor a file hash on an Ethereum testnet (Sepolia). Only hashes are published, and only when you choose to.
 
-## Chạy trên máy
+## Tech stack
 
-Cần Node.js 22.13 trở lên. Từ thư mục dự án:
+- React and Vite (single-page app with separate library and reader entry points)
+- Supabase: Auth, PostgreSQL with Row Level Security, and private Storage
+- Nginx (Docker) to serve the production build, with a small Node.js API for health checks
+- Redis (connectivity check only in the current version)
+- GitHub Actions for CI and GitHub Pages deployment
 
-```powershell
-Copy-Item .env.example .env.local
-```
+## Project structure
 
-Điền `VITE_SUPABASE_URL` và `VITE_SUPABASE_ANON_KEY` vào `.env.local`, sau đó:
+- `src/App.jsx`: library page composition and state coordination.
+- `src/components/`: sidebar, toolbar, document cards, lists, dialogs, and toasts.
+- `src/hooks/`: authentication (`useAuth.js`) and library data/upload logic (`useLibrary.js`).
+- `src/lib/`: Supabase client setup and data mapping helpers.
+- `src/reader/`: reader page, EPUB/PDF/AZW3 viewers, and reading-progress cache.
+- `server/`: health API and Redis connection used by the Docker backend.
+- `docker/`, `Dockerfile`, `docker-compose.yml`: container setup.
+- `contracts/FileHashRegistry.sol`: sample hash registry contract.
+- `supabase-schema.sql` and `supabase/migrations/`: database schema, RLS, and storage policies.
 
-```powershell
+## Getting started
+
+Requirements: Node.js 22.13 or newer.
+
+```bash
+cp .env.example .env.local
+# Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.local
 npm install
 npm run dev
 ```
 
-Mở địa chỉ localhost do Vite hiển thị. Có thể tạo bản production và chạy thử bằng:
+To test a production build locally:
 
-```powershell
+```bash
 npm run build
 npm run preview
 ```
 
-`.env.local`, `supabase-config.js` và `supabase-schema.sql` được Git bỏ qua. Giữ riêng cấu hình Supabase và chạy schema thủ công trong Supabase SQL Editor. Dùng public anon/publishable key ở frontend; tuyệt đối không dùng `service_role` hoặc secret key. Public key có thể nhìn thấy trong bundle trình duyệt; RLS, Storage policies và giới hạn Supabase mới là ranh giới bảo vệ dữ liệu.
+## Running with Docker
 
-## Chạy bằng Docker
-
-Docker chỉ đóng gói frontend tĩnh; PostgreSQL, Auth và Storage tiếp tục chạy trên Supabase Cloud. Không mở cổng database ra Internet.
-
-```powershell
-Copy-Item docker.env.example docker.env
-```
-
-Điền URL và public anon/publishable key vào `docker.env`, sau đó:
-
-```powershell
+```bash
+cp docker.env.example docker.env
+# Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in docker.env
 docker compose --env-file docker.env up --build -d
 ```
 
-Mở `http://localhost:8080`. Nginx chạy non-root, filesystem chỉ đọc, có security headers, giới hạn request cơ bản và health check. Vite nhúng các giá trị `VITE_*` vào frontend trong lúc build; chúng không phải nơi lưu bí mật.
+The app is then available at `http://localhost:8080`. Nginx serves the frontend and forwards `/api/*` to the internal API service. Check the health endpoint at `http://localhost:8080/api/health`.
 
-Giới hạn Nginx là lớp bảo vệ cơ bản cho container, **không phải biện pháp chống DDoS**: nội dung file và API Auth/DB đi trực tiếp tới Supabase. Khi public website, đặt CDN/WAF như Cloudflare trước hostname, bật managed WAF/DDoS protection, giới hạn request cho Auth và Storage phù hợp với lưu lượng thực, chỉ cho phép domain website cần thiết trong Supabase Auth URL configuration, và theo dõi cảnh báo/usage của Supabase. Không đưa service-role key vào container frontend. Cần cấu hình DNS/tài khoản CDN và Supabase Dashboard thủ công; repo không thể tự bật các dịch vụ đó.
+The Redis URL is configured with `REDIS_URL` in `docker.env`. Use a Redis instance you control, and secure it with authentication and a firewall. Do not expose it to the public internet.
 
-## Mã hóa và dữ liệu riêng tư
+Useful commands:
 
-Ứng dụng dùng TLS tới Supabase, private Storage bucket và RLS theo `auth.uid()`. Schema thu hồi quyền bảng khỏi role `anon`/`PUBLIC` và chỉ cấp cho `authenticated`; RLS tiếp tục giới hạn từng hàng theo chủ sở hữu. Database/storage at-rest được nhà cung cấp Supabase quản lý; xác minh trạng thái, phạm vi và chính sách lưu trữ trong dashboard/tài liệu của project. Đây **không phải mã hóa đầu cuối**: Supabase vẫn xử lý dữ liệu sau khi xác thực. Không tự mã hóa dữ liệu ở frontend theo mặc định vì sẽ làm tìm kiếm, khôi phục tài khoản và xử lý nội dung sách phức tạp hơn. Không lưu khóa bí mật hoặc service-role key trong Vite variables, Docker image hay trình duyệt.
+```bash
+docker compose --env-file docker.env ps
+docker compose --env-file docker.env logs api
+docker compose down
+```
 
-Tiến độ đọc đồng bộ qua cột `reading_progress`; nếu mất mạng, reader tiếp tục lưu tạm tiến độ trên thiết bị và thử đồng bộ lại khi mạng hoạt động. Dấu trang và ghi chú được lưu trong `reader_annotations` với RLS theo chủ sở hữu. Bản offline được lưu trong IndexedDB của trình duyệt và **không có mã hóa ứng dụng riêng**; chỉ bật trên thiết bị đáng tin cậy, xóa bản offline trước khi chia sẻ thiết bị.
+Vite embeds `VITE_*` values into the frontend at build time, so rebuild after changing them.
 
-Production build thêm Content Security Policy (CSP) và Referrer Policy vào cả hai trang HTML. GitHub Pages không cho cấu hình tùy ý HTTP response headers; CSP dạng meta giúp hạn chế nguồn script, nhưng không thay thế được `frame-ancestors`/`X-Frame-Options`. Docker Nginx có thể gửi các header đó. Parser AZW3 được bundle từ dependency đã pin thay vì tải mã chạy trực tiếp từ CDN. Dependabot theo dõi cập nhật npm và GitHub Actions hàng tuần.
+## Supabase setup
 
-## Blockchain proof-of-integrity
+1. Create a Supabase project.
+2. For a new project, run `supabase-schema.sql` in the SQL Editor. For an existing project, apply the files in `supabase/migrations/` in chronological order.
+3. In **Authentication → Settings**, enable sign-ups as needed and configure the email provider. Email confirmation is not required by the app.
+4. In **Authentication → URL Configuration**, add your local and deployed site URLs to the redirect list.
 
-Không ghi sách, tên file, tài khoản hoặc metadata cá nhân lên blockchain. Một hash công khai vẫn có thể tiết lộ việc người dùng sở hữu một file đã biết; chỉ neo hash theo lựa chọn rõ ràng của người dùng. Contract mẫu nằm tại `contracts/FileHashRegistry.sol`.
+Only the public anon/publishable key belongs in the frontend. Never use the `service_role` key or any secret key in the browser, Docker images, or GitHub Actions variables. Data protection depends on RLS, Storage policies, and Supabase project settings, so review them before publishing.
 
-1. Triển khai contract trên **Sepolia testnet** bằng ví của bạn (ví dụ qua Remix, compiler Solidity 0.8.24).
-2. Đặt địa chỉ contract vào `VITE_FILE_HASH_REGISTRY_ADDRESS` trong `.env.local` hoặc `docker.env`, rồi build lại ứng dụng.
-3. Trong reader, chọn biểu tượng dấu vân tay. Lần đầu ví sẽ yêu cầu ký; các lần sau kiểm tra hash hiện tại với bản neo của cùng ví. Giao dịch hash công khai và người dùng trả phí gas Sepolia.
+## Deployment (GitHub Pages)
 
-Không đưa private key vào ứng dụng. Chỉ dùng testnet cho bản mẫu; cần review contract và quy trình triển khai độc lập trước khi dùng mạng chính.
+- `.github/workflows/ci.yml` runs the build and dependency audit on pull requests and pushes to `main`.
+- `.github/workflows/deploy.yml` builds and deploys to GitHub Pages on pushes to `main` or on manual runs.
 
-## Giới hạn bảo vệ mạng
+In the repository settings, add these **Actions variables**:
 
-Không hệ thống nào đảm bảo website “không bị tấn công” hoặc miễn nhiễm DDoS. Nginx rate limit trong Docker chỉ giảm một phần lạm dụng vào frontend; nó không che chắn endpoint Supabase. Đưa domain sau CDN/WAF, bật DDoS protection và managed rules, giới hạn Supabase Auth/Storage theo khả năng của project, theo dõi quota/alerts, giữ RLS bật và dùng MFA cho tài khoản quản trị. Các thiết lập dashboard/CDN và key của project phải do chủ sở hữu cấu hình; Docker không thay thế các lớp đó.
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_FILE_HASH_REGISTRY_ADDRESS` (optional)
 
-## Cấu hình Supabase
+Then go to **Settings → Pages**, and set the source to **GitHub Actions**.
 
-1. Tạo project Supabase trên gói Free.
-2. Với project mới, dùng nội dung `supabase-schema.sql` trong **SQL Editor** để tạo bảng, RLS, Storage bucket và policies. Với project đã có dữ liệu, chạy migrations trong `supabase/migrations/` theo thứ tự thời gian. Nếu migration reader ngày 27 đã chạy, chạy thêm `20261028000000_lock_down_anon_table_grants.sql` để thu hồi quyền bảng khỏi role `anon`/`PUBLIC`; thao tác này chỉ giữ quyền truy cập cho người dùng đã xác thực.
-3. Trong **Authentication → Settings → User Signups**, bật đăng ký khi tạo mã ID. Có thể tắt lại sau đó.
-4. Bật **Email provider** và tắt **Confirm email**. Website chỉ yêu cầu mã ID; email tổng hợp chỉ được dùng nội bộ cho Supabase Auth.
-5. Thêm URL local và URL website triển khai vào **Authentication → URL Configuration → Redirect URLs**.
+## Security and privacy
 
-Mã ID là bí mật đăng nhập. Ai có mã đều có thể truy cập thư viện; nếu mất mã và không còn phiên đăng nhập thì không thể khôi phục tài khoản. Mã được lưu trên thiết bị hiện tại nếu chọn ghi nhớ; hãy sao chép hoặc tải mã để dùng trên thiết bị khác.
+- Connections to Supabase use TLS. Files are stored in a private Storage bucket, and each row is restricted to its owner through RLS (`auth.uid()`).
+- The schema revokes table access from the `anon` role and grants access only to authenticated users.
+- The production build adds a Content Security Policy and a Referrer Policy. The Docker Nginx configuration also sends headers such as `X-Frame-Options` and `X-Content-Type-Options`, and runs as a non-root user with a read-only filesystem.
+- This is not end-to-end encryption. Supabase processes data after authentication. Encryption at rest is managed by Supabase; review its documentation for details.
+- Offline copies in IndexedDB are not encrypted by the app. Clear them before sharing a device.
+- Nginx rate limiting is a basic protection and is not a DDoS defense. For public deployments, put a CDN or WAF in front of the site, and set quotas and alerts in Supabase.
+- Do not commit `.env.local`, `docker.env`, or `supabase-config.js`. They are ignored by Git.
 
-## CI/CD GitHub Pages và HTTPS
+## Blockchain proof of integrity (optional)
 
-- `.github/workflows/ci.yml` chạy build và audit trên pull request, push lên `main`.
-- `.github/workflows/deploy.yml` build rồi deploy lên GitHub Pages khi push lên `main` hoặc chạy thủ công.
+Only file hashes are considered, never file names, account data, or content. A public hash can still reveal that someone owns a known file, so anchoring is opt-in.
 
-Trong GitHub repository, thêm các **Actions variables**:
+1. Deploy `contracts/FileHashRegistry.sol` to the Sepolia testnet (for example, with Remix and Solidity 0.8.24).
+2. Set the contract address in `VITE_FILE_HASH_REGISTRY_ADDRESS` and rebuild.
+3. In the reader, use the fingerprint icon to sign and anchor a hash with your wallet. The transaction pays gas in Sepolia test ETH.
 
-- `VITE_SUPABASE_URL`: Project URL.
-- `VITE_SUPABASE_ANON_KEY`: public anon/publishable key.
-- `VITE_FILE_HASH_REGISTRY_ADDRESS`: địa chỉ contract đã triển khai trên Sepolia (có thể để trống).
+Never put a private key into the application. This is a sample contract: review it and your deployment process before using a mainnet.
 
-Vào repository **Settings → Pages → Build and deployment → Source**, chọn **GitHub Actions**. Sau khi workflow hoàn tất, mở URL GitHub Pages được hiển thị trong phần Pages/Actions, thường là `https://lequangvinh11022004.github.io/MyLibrary/`.
+## Limitations
 
-GitHub tự cấp và gia hạn TLS certificate cho domain `github.io`; không đưa file certificate/private key vào repository. HTTPS được hỗ trợ mặc định cho domain `github.io`. Trong **Settings → Pages**, bật **Enforce HTTPS** nếu tùy chọn này xuất hiện. Nếu sau này dùng custom domain, cần cấu hình DNS đúng và chờ GitHub xác minh/cấp certificate trước khi bật Enforce HTTPS.
+- Supported inline formats: PDF, EPUB, AZW3 (non-DRM), images, and some text files. Other formats can be downloaded.
+- PDF search jumps to the page with a match but does not highlight the text.
+- Reading progress: PDF by page, EPUB by location, AZW3 by chapter percentage, and text by scroll position.
 
-Các `VITE_*` values được nhúng vào mã trình duyệt nên chỉ dùng public anon key; quyền truy cập dữ liệu phải được giới hạn bằng RLS. Không đưa Supabase service-role key hoặc private key blockchain vào Actions variables hay client.
+## License
 
-## Dữ liệu và giới hạn
-
-- File gốc nằm trong private Supabase Storage bucket `library-files`; metadata và thư mục nằm trong PostgreSQL.
-- Hỗ trợ tải nhiều file hoặc cả thư mục, giới hạn client/storage 50 MB mỗi file.
-- Tệp trùng nội dung trong cùng tài khoản được bỏ qua bằng SHA-256.
-- Hỗ trợ xem trực tiếp PDF, EPUB, AZW3 không DRM, hình ảnh và một số file văn bản. Loại khác có thể tải xuống để mở bằng ứng dụng phù hợp.
-- Thanh tiến độ reader hiển thị phần trăm và vị trí: PDF theo trang, EPUB theo vị trí sách, AZW3 theo tỷ lệ chương đã đọc, văn bản theo vị trí cuộn. Tiến độ được đồng bộ tại Supabase, giữ tạm cục bộ khi mất mạng.
-- Có thể lưu dấu trang, ghi chú, tìm nội dung trong PDF/EPUB/AZW3 và văn bản thuần; tìm kiếm PDF chỉ chuyển tới trang có kết quả, không tô sáng đoạn văn.
-- Có thể chủ động lưu file vào IndexedDB để đọc offline trên thiết bị hiện tại. Bản offline không được mã hóa riêng bởi ứng dụng.
-- Reader tối ưu cho điện thoại và tablet: trang PDF vừa chiều rộng, điều khiển chạm/swipe, EPUB/AZW3 hỗ trợ vuốt chuyển trang/chương, cùng tùy chỉnh cỡ chữ và nền sáng/sepia/tối.
-- Không đưa Supabase service key vào client hoặc GitHub Actions variables.
+No license has been specified yet.

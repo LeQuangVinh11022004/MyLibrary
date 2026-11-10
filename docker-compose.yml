@@ -12,15 +12,45 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-      - /var/cache/nginx
+      - /var/cache/nginx:uid=101,gid=101,mode=0755
       - /var/run
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
       interval: 30s
       timeout: 3s
       retries: 3
+
+  api:
+    build:
+      context: .
+      target: api
+    environment:
+      PORT: 3001
+      REDIS_URL: ${REDIS_URL:-redis://host.docker.internal:6379}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    expose:
+      - "3001"
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
