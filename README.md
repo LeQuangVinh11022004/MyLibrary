@@ -1,5 +1,13 @@
 # Trang Sách (MyLibrary)
 
+[![CI](https://github.com/LeQuangVinh11022004/MyLibrary/actions/workflows/ci.yml/badge.svg)](https://github.com/LeQuangVinh11022004/MyLibrary/actions/workflows/ci.yml)
+[![Deploy](https://github.com/LeQuangVinh11022004/MyLibrary/actions/workflows/deploy.yml/badge.svg)](https://github.com/LeQuangVinh11022004/MyLibrary/actions/workflows/deploy.yml)
+![Node.js](https://img.shields.io/badge/Node.js-22.13%2B-339933?logo=node.js&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-Auth%20%26%20Storage-3ECF8E?logo=supabase&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+
 A personal, cloud-backed digital library for the web. Organize books and study materials into folders, search your collection, mark favorites and read status, and read PDF, EPUB, and AZW3 files directly in the browser with a full-screen reader that remembers where you stopped.
 
 ## Features
