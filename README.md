@@ -67,7 +67,7 @@ cp docker.env.example docker.env
 docker compose --env-file docker.env up --build -d
 ```
 
-The app is then available at `http://localhost:8080`. Nginx serves the frontend and forwards `/api/*` to the internal API service. Check the health endpoint at `http://localhost:8080/api/health`.
+The app is then available at `http://localhost:8080`. Nginx serves the frontend and forwards `/api/*` to the internal API service. Check the health endpoint at `http://localhost:8080/api/health`. It returns `200` when Redis is reachable and `503` otherwise; the web frontend keeps running either way.
 
 The Redis URL is configured with `REDIS_URL` in `docker.env`. Use a Redis instance you control, and secure it with authentication and a firewall. Do not expose it to the public internet.
 

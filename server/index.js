@@ -2,29 +2,39 @@ import { createServer } from "node:http";
 import redis from "./redis.js";
 
 const port = Number(process.env.PORT || 3001);
+const REDIS_PING_TIMEOUT_MS = 2000;
+const startedAt = Date.now();
+
+function sendJson(response, statusCode, body) {
+  response.writeHead(statusCode, {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json; charset=utf-8",
+  });
+  response.end(JSON.stringify(body));
+}
+
+function pingRedis() {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("Redis ping timed out")), REDIS_PING_TIMEOUT_MS);
+  });
+  return Promise.race([redis.ping(), timeout]).finally(() => clearTimeout(timer));
+}
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url || "/", "http://localhost");
   if (request.method !== "GET" || url.pathname !== "/api/health") {
-    response.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
-    response.end(JSON.stringify({ error: "Not found" }));
+    sendJson(response, 404, { error: "Not found" });
     return;
   }
 
+  const uptimeSeconds = Math.round((Date.now() - startedAt) / 1000);
   try {
-    await redis.ping();
-    response.writeHead(200, {
-      "Cache-Control": "no-store",
-      "Content-Type": "application/json; charset=utf-8",
-    });
-    response.end(JSON.stringify({ status: "ok", redis: "connected" }));
+    await pingRedis();
+    sendJson(response, 200, { status: "ok", redis: "connected", uptimeSeconds });
   } catch (error) {
     console.error("Redis health check failed:", error.message);
-    response.writeHead(503, {
-      "Cache-Control": "no-store",
-      "Content-Type": "application/json; charset=utf-8",
-    });
-    response.end(JSON.stringify({ status: "degraded", redis: "unavailable" }));
+    sendJson(response, 503, { status: "degraded", redis: "unavailable", uptimeSeconds });
   }
 });
 
