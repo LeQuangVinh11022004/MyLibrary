@@ -380,22 +380,22 @@ export default function ReaderApp() {
     if (!isBook) return undefined;
     function onKeyDown(event) {
       if (event.altKey || event.ctrlKey || event.metaKey) return;
-      if (event.key === "ArrowLeft" || event.key === "PageUp") previousPage();
-      if (event.key === "ArrowRight" || event.key === "PageDown") nextPage();
+      if (event.key === "ArrowLeft" || (!isAzw3 && event.key === "PageUp")) previousPage();
+      if (event.key === "ArrowRight" || (!isAzw3 && event.key === "PageDown")) nextPage();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [chapterIndex, chapterCount, isBook]);
+  }, [chapterIndex, chapterCount, isAzw3, isBook]);
 
   const previousPage = useCallback(() => {
-    if (isAzw3) setChapterIndex((index) => Math.max(0, index - 1));
+    if (isAzw3) azw3Ref.current?.previous();
     else epubRef.current?.previous()?.catch((cause) => notify(cause.message));
   }, [isAzw3, notify]);
 
   const nextPage = useCallback(() => {
-    if (isAzw3) setChapterIndex((index) => Math.min(chapterCount - 1, index + 1));
+    if (isAzw3) azw3Ref.current?.next();
     else epubRef.current?.next()?.catch((cause) => notify(cause.message));
-  }, [chapterCount, isAzw3, notify]);
+  }, [isAzw3, notify]);
 
   function changeTheme() {
     setTheme((current) => THEMES[(THEMES.indexOf(current) + 1) % THEMES.length]);
@@ -469,7 +469,7 @@ export default function ReaderApp() {
     } else if (locationToRestore.format === "epub") {
       epubRef.current?.goTo(locationToRestore)?.catch((cause) => notify(`Không thể mở vị trí EPUB: ${cause.message}`));
     } else if (locationToRestore.format === "azw3") {
-      setChapterIndex(Math.min(chapterCount - 1, Math.max(0, locationToRestore.chapterIndex || 0)));
+      azw3Ref.current?.goTo(locationToRestore);
     }
   }
 
