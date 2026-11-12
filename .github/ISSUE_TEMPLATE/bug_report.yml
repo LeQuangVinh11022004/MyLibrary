@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a reproducible problem in Trang Sach
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting, search existing issues for a similar report.
+        Do not include passwords, API keys, private documents, or personal data.
+  - type: input
+    id: version
+    attributes:
+      label: App version or commit
+      description: Which deployment or commit are you using?
+      placeholder: "e.g. main, commit SHA, or deployed URL"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, operating system, and device type
+      placeholder: "e.g. Chrome on Windows 11, desktop"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest set of steps that reproduces the problem.
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs or screenshots
+      description: Remove secrets and personal information before sharing.
+    validations:
+      required: false
+

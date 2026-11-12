@@ -10,6 +10,13 @@
 
 A personal, cloud-backed digital library for the web. Organize books and study materials into folders, search your collection, mark favorites and read status, and read PDF, EPUB, and AZW3 files directly in the browser with a full-screen reader that remembers where you stopped.
 
+## Community
+
+- Read the [Code of Conduct](./CODE_OF_CONDUCT.md) and [Contributing Guide](./CONTRIBUTING.md) before participating.
+- Report bugs and suggest features through the GitHub issue templates.
+- Report security vulnerabilities privately; see [SECURITY.md](./SECURITY.md).
+- This project is licensed under the [MIT License](./LICENSE).
+
 ## Features
 
 - **Library management**: folders, search, favorites, and read status.
