@@ -20,7 +20,9 @@ services:
       - no-new-privileges:true
     restart: unless-stopped
     depends_on:
-      api:
+      api1:
+        condition: service_started
+      api2:
         condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
@@ -28,7 +30,8 @@ services:
       timeout: 3s
       retries: 3
 
-  api:
+  api1: &api
+    image: mylibrary-api:local
     build:
       context: .
       target: api
@@ -54,3 +57,11 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+
+  api2:
+    <<: *api

@@ -657,3 +657,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   .empty-state p { font-size: 11px; }
   .auth-dialog { border-radius: 20px; }
 }
+
+/* Performance & UX polish */
+html { color-scheme: light; scroll-behavior: smooth; -webkit-tap-highlight-color: transparent; }
+.document-card { content-visibility: auto; contain-intrinsic-size: auto 250px; }
+.favorite-button, .card-icon-button, .read-status { min-width: 32px; min-height: 32px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
