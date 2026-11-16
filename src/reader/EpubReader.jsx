@@ -17,6 +17,7 @@ export const EpubReader = forwardRef(function EpubReader({
   fontSize,
   onLocation,
   onProgress,
+  onToc,
   onReady,
 }, ref) {
   const mountRef = useRef(null);
@@ -26,7 +27,7 @@ export const EpubReader = forwardRef(function EpubReader({
   useImperativeHandle(ref, () => ({
     previous: () => renditionRef.current?.prev(),
     next: () => renditionRef.current?.next(),
-    goTo: (progress) => renditionRef.current?.display(progress?.cfi || progress?.percentage || undefined),
+    goTo: (progress) => renditionRef.current?.display(progress?.href || progress?.cfi || progress?.percentage || undefined),
     search: async (query) => {
       const book = bookRef.current;
       const rendition = renditionRef.current;
@@ -71,6 +72,16 @@ export const EpubReader = forwardRef(function EpubReader({
         await book.open(content, "binary");
         bookOpened = true;
         bookRef.current = book;
+        if (onToc) {
+          book.loaded.navigation.then((nav) => {
+            if (disposed) return;
+            const flatten = (items = [], depth = 0) => items.flatMap((entry) => [
+              { id: entry.id || entry.href, label: (entry.label || "").trim(), href: entry.href, depth },
+              ...flatten(entry.subitems || [], depth + 1),
+            ]);
+            onToc(flatten(nav?.toc || []).filter((entry) => entry.label && entry.href));
+          }).catch(() => {});
+        }
         if (disposed || !mountRef.current) {
           destroyBook();
           return;
@@ -121,6 +132,16 @@ export const EpubReader = forwardRef(function EpubReader({
           const pageTurn = deltaX < 0 ? rendition.next() : rendition.prev();
           pageTurn.catch((cause) => console.warn("Không thể chuyển trang EPUB.", cause));
         });
+        rendition.on("keyup", (event) => {
+          window.dispatchEvent(new KeyboardEvent("keydown", {
+            key: event.key,
+            code: event.code,
+            shiftKey: event.shiftKey,
+            ctrlKey: event.ctrlKey,
+            altKey: event.altKey,
+            metaKey: event.metaKey,
+          }));
+        });
         const savedProgress = initialProgressRef.current;
         const savedCfi = savedProgress?.format === "epub" ? savedProgress.cfi : null;
         const savedPercentage = savedProgress?.format === "epub"
@@ -150,7 +171,7 @@ export const EpubReader = forwardRef(function EpubReader({
       bookRef.current = null;
       if (bookOpened) destroyBook();
     };
-  }, [blob, onReady, onLocation, onProgress]);
+  }, [blob, onReady, onLocation, onProgress, onToc]);
 
   useEffect(() => {
     const rendition = renditionRef.current;
@@ -161,7 +182,21 @@ export const EpubReader = forwardRef(function EpubReader({
 
   return (
     <div className={`epub-canvas theme-${theme}`}>
+      <button
+        type="button"
+        className="epub-edge-zone is-prev"
+        onClick={() => renditionRef.current?.prev()}
+        aria-label="Trang trước"
+        title="Trang trước (←)"
+      />
       <div className="epub-page" ref={mountRef} />
+      <button
+        type="button"
+        className="epub-edge-zone is-next"
+        onClick={() => renditionRef.current?.next()}
+        aria-label="Trang tiếp theo"
+        title="Trang tiếp theo (→)"
+      />
     </div>
   );
 });

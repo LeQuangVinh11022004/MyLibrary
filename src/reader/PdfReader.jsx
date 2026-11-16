@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Minus, Plus, RotateCcw } from "lucide-react";
 
 function clampPage(page, totalPages) {
   return Math.min(totalPages, Math.max(1, Number.isInteger(page) ? page : 1));
@@ -108,8 +108,13 @@ export const PdfReader = forwardRef(function PdfReader({ blob, initialProgress, 
   const [pageRatio, setPageRatio] = useState(11 / 8.5);
   const [renderPages, setRenderPages] = useState(() => new Set());
   const [error, setError] = useState("");
+  const [pageInput, setPageInput] = useState(String(pageNumberRef.current));
 
   pageNumberRef.current = pageNumber;
+
+  useEffect(() => {
+    setPageInput(String(pageNumber));
+  }, [pageNumber]);
 
   function scrollToPage(page, behavior = "smooth") {
     if (!totalPages || !stageRef.current) return;
@@ -126,6 +131,13 @@ export const PdfReader = forwardRef(function PdfReader({ blob, initialProgress, 
   }
 
   useImperativeHandle(ref, () => ({
+    previous: () => scrollToPage(pageNumberRef.current - 1),
+    next: () => scrollToPage(pageNumberRef.current + 1),
+    first: () => scrollToPage(1),
+    last: () => scrollToPage(totalPages),
+    zoomIn: () => setZoom((current) => Math.min(2, current + 0.25)),
+    zoomOut: () => setZoom((current) => Math.max(0.75, current - 0.25)),
+    resetZoom: () => setZoom(1),
     goTo: (progress) => {
       const restorePage = Number.isInteger(progress?.pageNumber) ? progress.pageNumber : null;
       if (Number.isFinite(progress?.zoom)) {
@@ -329,16 +341,48 @@ export const PdfReader = forwardRef(function PdfReader({ blob, initialProgress, 
     return <div className="pdf-reader-error" role="alert">{error}</div>;
   }
 
+  function submitPageJump(event) {
+    event.preventDefault();
+    const parsed = Number.parseInt(pageInput, 10);
+    if (Number.isFinite(parsed) && totalPages) {
+      scrollToPage(clampPage(parsed, totalPages));
+    } else {
+      setPageInput(String(pageNumber));
+    }
+  }
+
   return (
     <div className="pdf-reader">
       <div className="pdf-reader-controls" aria-label="Điều khiển PDF">
-        <button type="button" className="reader-control pdf-control" onClick={() => changePage(-1)} disabled={pageNumber <= 1} aria-label="Trang PDF trước"><ChevronLeft size={18} /></button>
-        <span className="pdf-page-count" aria-live="polite">{pageNumber} / {totalPages || "…"}</span>
-        <button type="button" className="reader-control pdf-control" onClick={() => changePage(1)} disabled={pageNumber >= totalPages} aria-label="Trang PDF tiếp theo"><ChevronRight size={18} /></button>
+        <button type="button" className="reader-control pdf-control" onClick={() => changePage(-1)} disabled={pageNumber <= 1} aria-label="Trang PDF trước" title="Trang trước"><ChevronLeft size={18} /></button>
+        <form className="pdf-page-jump" onSubmit={submitPageJump}>
+          <input
+            type="number"
+            min={1}
+            max={totalPages || 1}
+            value={pageInput}
+            onChange={(event) => setPageInput(event.target.value)}
+            onBlur={submitPageJump}
+            aria-label="Số trang hiện tại"
+            disabled={!totalPages}
+          />
+          <span>/ {totalPages || "…"}</span>
+        </form>
+        <button type="button" className="reader-control pdf-control" onClick={() => changePage(1)} disabled={pageNumber >= totalPages} aria-label="Trang PDF tiếp theo" title="Trang tiếp theo"><ChevronRight size={18} /></button>
         <span className="pdf-control-spacer" />
-        <button type="button" className="reader-control pdf-control" onClick={() => setZoom((current) => Math.max(0.75, current - 0.25))} disabled={zoom <= 0.75} aria-label="Thu nhỏ PDF"><Minus size={17} /></button>
-        <span className="pdf-zoom-label">{Math.round(zoom * 100)}%</span>
-        <button type="button" className="reader-control pdf-control" onClick={() => setZoom((current) => Math.min(2, current + 0.25))} disabled={zoom >= 2} aria-label="Phóng to PDF"><Plus size={17} /></button>
+        <button type="button" className="reader-control pdf-control" onClick={() => setZoom((current) => Math.max(0.75, current - 0.25))} disabled={zoom <= 0.75} aria-label="Thu nhỏ PDF" title="Thu nhỏ"><Minus size={17} /></button>
+        <button
+          type="button"
+          className="reader-control pdf-zoom-reset"
+          onClick={() => setZoom(1)}
+          disabled={zoom === 1}
+          aria-label="Đặt lại thu phóng 100%"
+          title="Đặt lại 100%"
+        >
+          <span>{Math.round(zoom * 100)}%</span>
+          {zoom !== 1 && <RotateCcw size={12} />}
+        </button>
+        <button type="button" className="reader-control pdf-control" onClick={() => setZoom((current) => Math.min(2, current + 0.25))} disabled={zoom >= 2} aria-label="Phóng to PDF" title="Phóng to"><Plus size={17} /></button>
       </div>
       <div
         className={`pdf-page-stage${zoom > 1 ? " is-zoomed" : ""}`}

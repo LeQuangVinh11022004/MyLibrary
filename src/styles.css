@@ -662,5 +662,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 html { color-scheme: light; scroll-behavior: smooth; -webkit-tap-highlight-color: transparent; }
 .document-card { content-visibility: auto; contain-intrinsic-size: auto 250px; }
 .favorite-button, .card-icon-button, .read-status { min-width: 32px; min-height: 32px; }
+.redis-status-card.is-connected { border-color: #cde0cb; background: linear-gradient(145deg, #f3f8f1, #e8f1e6); }
+.redis-status-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.redis-status-head strong { flex: 1; margin: 0; }
+.redis-status-head .privacy-icon { margin: 0; width: 28px; height: 28px; }
+.redis-refresh { width: 26px; height: 26px; min-width: 26px; min-height: 26px; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 

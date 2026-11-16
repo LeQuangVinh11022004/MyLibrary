@@ -35,6 +35,22 @@ function productionSecurityMeta() {
 export default defineConfig({
   base: process.env.GITHUB_ACTIONS ? "/MyLibrary/" : "/",
   plugins: [react(), productionSecurityMeta()],
+  server: {
+    proxy: {
+      "/api": {
+        target: process.env.API_PROXY_TARGET || "http://127.0.0.1:3001",
+        changeOrigin: true,
+      },
+    },
+  },
+  preview: {
+    proxy: {
+      "/api": {
+        target: process.env.API_PROXY_TARGET || "http://127.0.0.1:3001",
+        changeOrigin: true,
+      },
+    },
+  },
   build: {
     rollupOptions: {
       input: {

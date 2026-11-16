@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "node --watch server/index.js",
     "build": "vite build",
     "preview": "vite preview",
-    "start:api": "node server/index.js"
+    "start:api": "node server/index.js",
+    "docker:up": "docker compose --env-file docker.env up -d --build",
+    "docker:down": "docker compose down"
   },
   "dependencies": {
     "@lingo-reader/mobi-parser": "0.4.6",

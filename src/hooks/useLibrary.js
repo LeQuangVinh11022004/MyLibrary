@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { removeCachedDocument } from "../lib/offline-cache";
+import {
+  getCachedLibrarySnapshot,
+  invalidateCachedLibrarySnapshot,
+  setCachedLibrarySnapshot,
+} from "../lib/redis-api";
 import { supabase } from "../lib/supabase";
 import {
   getUploadErrorMessage,
@@ -45,6 +50,12 @@ export function useLibrary(user, notify) {
     }
     setLoading(true);
     try {
+      const cached = await getCachedLibrarySnapshot(user.id);
+      if (cached?.documents && cached?.folders) {
+        setDocuments(cached.documents);
+        setFolders(cached.folders);
+        setLoading(false);
+      }
       const [documentResult, folderResult] = await Promise.all([
         supabase.from("library_documents").select(DOCUMENT_COLUMNS)
           .eq("owner_id", user.id).order("added_at", { ascending: false }),
@@ -53,8 +64,14 @@ export function useLibrary(user, notify) {
       ]);
       if (documentResult.error) throw documentResult.error;
       if (folderResult.error) throw folderResult.error;
-      setDocuments(documentResult.data.map(mapDocument));
-      setFolders(folderResult.data.map(mapFolder));
+      const mappedDocuments = documentResult.data.map(mapDocument);
+      const mappedFolders = folderResult.data.map(mapFolder);
+      setDocuments(mappedDocuments);
+      setFolders(mappedFolders);
+      setCachedLibrarySnapshot(user.id, {
+        documents: mappedDocuments,
+        folders: mappedFolders,
+      });
     } finally {
       setLoading(false);
     }
@@ -80,6 +97,7 @@ export function useLibrary(user, notify) {
     const folder = mapFolder(data);
     cache.push(folder);
     setFolders((items) => [...items, folder]);
+    invalidateCachedLibrarySnapshot(user.id);
     return folder.id;
   }, [folders, user]);
 
@@ -201,7 +219,8 @@ export function useLibrary(user, notify) {
     if (error) throw error;
     setDocuments((items) => items.map((document) => document.id === id
       ? { ...document, favorite: !document.favorite } : document));
-  }, [documents]);
+    if (user?.id) invalidateCachedLibrarySnapshot(user.id);
+  }, [documents, user?.id]);
 
   const toggleRead = useCallback(async (id) => {
     const item = documents.find((document) => document.id === id);
@@ -210,7 +229,8 @@ export function useLibrary(user, notify) {
     const { error } = await supabase.from("library_documents").update({ status }).eq("id", id);
     if (error) throw error;
     setDocuments((items) => items.map((document) => document.id === id ? { ...document, status } : document));
-  }, [documents]);
+    if (user?.id) invalidateCachedLibrarySnapshot(user.id);
+  }, [documents, user?.id]);
 
   const downloadDocument = useCallback(async (item) => {
     const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(item.storagePath);
@@ -231,6 +251,7 @@ export function useLibrary(user, notify) {
     const { error } = await supabase.from("library_documents").delete().eq("id", id);
     if (error) throw error;
     setDocuments((items) => items.filter((document) => document.id !== id));
+    if (user?.id) invalidateCachedLibrarySnapshot(user.id);
     try {
       await removeCachedDocument(user.id, item.id);
     } catch (cacheError) {

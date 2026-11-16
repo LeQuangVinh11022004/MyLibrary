@@ -115,6 +115,17 @@ function Azw3Chapter({
       else onPrevious();
     }
 
+    function onDocumentKeyDown(event) {
+      window.dispatchEvent(new KeyboardEvent("keydown", {
+        key: event.key,
+        code: event.code,
+        shiftKey: event.shiftKey,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey,
+        metaKey: event.metaKey,
+      }));
+    }
+
     function attachDocumentObservers() {
       const contentDocument = iframe.contentDocument;
       if (!contentDocument?.body || activeDocument === contentDocument) return;
@@ -122,6 +133,7 @@ function Azw3Chapter({
         activeDocument.removeEventListener("load", measureContent, true);
         activeDocument.removeEventListener("touchstart", onDocumentTouchStart);
         activeDocument.removeEventListener("touchend", onDocumentTouchEnd);
+        activeDocument.removeEventListener("keydown", onDocumentKeyDown);
         resizeObserver?.disconnect();
       }
       activeDocument = contentDocument;
@@ -129,6 +141,7 @@ function Azw3Chapter({
       activeDocument.addEventListener("load", measureContent, true);
       activeDocument.addEventListener("touchstart", onDocumentTouchStart, { passive: true });
       activeDocument.addEventListener("touchend", onDocumentTouchEnd, { passive: true });
+      activeDocument.addEventListener("keydown", onDocumentKeyDown);
       resizeObserver = new ResizeObserver(measureContent);
       resizeObserver.observe(contentDocument.documentElement);
       resizeObserver.observe(contentDocument.body);
@@ -143,6 +156,7 @@ function Azw3Chapter({
       activeDocument?.removeEventListener("load", measureContent, true);
       activeDocument?.removeEventListener("touchstart", onDocumentTouchStart);
       activeDocument?.removeEventListener("touchend", onDocumentTouchEnd);
+      activeDocument?.removeEventListener("keydown", onDocumentKeyDown);
       resizeObserver?.disconnect();
     };
   }, [chapterHtml, chapterIndex, fontSize, onMeasure, onNext, onPrevious, onReady, theme]);
@@ -230,6 +244,8 @@ export const Azw3Reader = forwardRef(function Azw3Reader({
     },
     next: () => scrollToChapter(activeChapterRef.current + 1),
     previous: () => scrollToChapter(activeChapterRef.current - 1),
+    first: () => scrollToChapter(0),
+    last: () => scrollToChapter((chapter?.spine?.length || 1) - 1),
     search: async (query) => {
       if (!chapter) throw new Error("AZW3 chưa sẵn sàng để tìm kiếm.");
       const cleanQuery = query.toLocaleLowerCase("vi");

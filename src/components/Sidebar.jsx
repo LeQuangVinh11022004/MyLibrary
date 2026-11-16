@@ -1,5 +1,7 @@
-import { BookOpen, Clock3, Folder, FolderPlus, Heart, LibraryBig, Plus, Upload, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { BookOpen, Clock3, Database, Folder, FolderPlus, Heart, LibraryBig, Plus, RefreshCw, Upload, X } from "lucide-react";
 import { getFolderPath } from "../lib/library-utils";
+import { fetchApiHealth } from "../lib/redis-api";
 
 const NAV_ITEMS = [
   { id: "all", label: "Tất cả sách", icon: LibraryBig },
@@ -12,6 +14,25 @@ export function Sidebar({
   user, view, folderId, folders, documents, open, onClose, onViewChange, onFolderSelect,
   onUpload, onUploadFolder, onCreateFolder, onAuth, onSignOut,
 }) {
+  const [apiHealth, setApiHealth] = useState(null);
+  const [checkingHealth, setCheckingHealth] = useState(false);
+
+  const checkHealth = useCallback(async () => {
+    setCheckingHealth(true);
+    try {
+      setApiHealth(await fetchApiHealth());
+    } finally {
+      setCheckingHealth(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkHealth();
+    const timer = window.setInterval(checkHealth, 30000);
+    return () => window.clearInterval(timer);
+  }, [checkHealth]);
+
+  const redisConnected = apiHealth?.redis === "connected";
   return (
     <>
       <button className={`sidebar-scrim${open ? " visible" : ""}`} type="button" aria-label="Đóng menu" onClick={onClose} />
@@ -65,10 +86,28 @@ export function Sidebar({
           </div>
         </nav>
         <div className="sidebar-bottom">
-          <div className="privacy-card">
-            <span className="privacy-icon"><BookOpen size={17} /></span>
-            <strong>Riêng tư theo mặc định</strong>
-            <p>Sách và tài liệu của bạn được lưu trong Supabase riêng tư.</p>
+          <div className={`privacy-card redis-status-card${redisConnected ? " is-connected" : ""}`}>
+            <div className="redis-status-head">
+              <span className="privacy-icon"><Database size={16} /></span>
+              <strong>Redis & Docker API</strong>
+              <button
+                type="button"
+                className="icon-button small-icon redis-refresh"
+                onClick={checkHealth}
+                disabled={checkingHealth}
+                aria-label="Kiểm tra kết nối Redis"
+                title="Kiểm tra kết nối Redis & cân bằng tải"
+              >
+                <RefreshCw size={13} className={checkingHealth ? "spin" : ""} />
+              </button>
+            </div>
+            <p>
+              {redisConnected
+                ? `Đã kết nối Redis${apiHealth.instance ? ` · node ${apiHealth.instance}` : ""}${apiHealth.cachedKeys !== null ? ` · ${apiHealth.cachedKeys} key` : ""}`
+                : apiHealth?.status === "degraded"
+                  ? "API đang chạy nhưng chưa kết nối được Redis (6379)."
+                  : "Chạy npm run start:api hoặc docker compose up để bật Redis cache."}
+            </p>
           </div>
           <div className="profile">
             <div className="avatar">{user ? "M" : "?"}</div>

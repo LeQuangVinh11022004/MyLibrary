@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, BookmarkPlus, Check, CloudDownload, Download, Fingerprint, LoaderCircle, NotebookPen, Search } from "lucide-react";
+import { ArrowLeft, BookmarkPlus, Check, CloudDownload, Download, Eye, EyeOff, Fingerprint, Keyboard, LoaderCircle, NotebookPen, Search, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { formatFileSize } from "../lib/library-utils";
 import { anchorOrVerifyFileHash, isHashRegistryConfigured } from "../lib/blockchain";
@@ -9,6 +9,13 @@ import { ReaderAnnotations } from "./ReaderAnnotations";
 import { ReaderSearch } from "./ReaderSearch";
 import { ReaderToolbar } from "./ReaderToolbar";
 import { cacheDocument, getCachedDocument, removeCachedDocument } from "../lib/offline-cache";
+import {
+  fetchRedisReaderPreferences,
+  fetchRedisReadingProgress,
+  invalidateCachedLibrarySnapshot,
+  saveRedisReaderPreferences,
+  saveRedisReadingProgress,
+} from "../lib/redis-api";
 import { loadReadingProgress, saveReadingProgress } from "./reading-progress";
 import "./reader.css";
 
@@ -56,6 +63,10 @@ export default function ReaderApp() {
   const [annotationsOpen, setAnnotationsOpen] = useState(false);
   const [readerWarning, setReaderWarning] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [tocItems, setTocItems] = useState([]);
+  const [zenMode, setZenMode] = useState(false);
   const [offlineAvailable, setOfflineAvailable] = useState(false);
   const [offlineCopyActive, setOfflineCopyActive] = useState(false);
   const [offlineBusy, setOfflineBusy] = useState(false);
@@ -175,6 +186,7 @@ export default function ReaderApp() {
       return undefined;
     }
     const timer = window.setTimeout(async () => {
+      saveRedisReadingProgress(user.id, item.id, readingProgress);
       try {
         const { error: syncError } = await supabase.from("library_documents")
           .update({ reading_progress: readingProgress }).eq("id", item.id);
@@ -194,6 +206,19 @@ export default function ReaderApp() {
     setChapterCount(count);
     setChapterIndex(Math.min(count - 1, Math.max(0, initialIndex)));
   }, []);
+
+  const computedToc = useMemo(() => {
+    if (isEpub) return tocItems;
+    if (isAzw3 && chapterCount > 1) {
+      return Array.from({ length: chapterCount }, (_, index) => ({
+        id: `chapter-${index}`,
+        label: `Chương ${index + 1}`,
+        chapterIndex: index,
+        depth: 0,
+      }));
+    }
+    return [];
+  }, [chapterCount, isAzw3, isEpub, tocItems]);
 
   useEffect(() => () => {
     window.clearTimeout(toastTimer.current);
@@ -274,12 +299,21 @@ export default function ReaderApp() {
         const fileBlob = cachedBlobMatches ? cachedDocument.blob : downloadError ? cachedDocument.blob : downloadedBlob;
         if (!active) return;
         const validProgress = (progress) => progress && ["epub", "pdf", "azw3", "text"].includes(progress.format);
+        const [redisProgress, redisPrefs] = await Promise.all([
+          fetchRedisReadingProgress(currentUser.id, document.id),
+          fetchRedisReaderPreferences(currentUser.id),
+        ]);
+        if (active && redisPrefs) {
+          if (["light", "sepia", "dark"].includes(redisPrefs.theme)) setTheme(redisPrefs.theme);
+          if (Number.isFinite(redisPrefs.fontSize)) {
+            setFontSize(Math.min(30, Math.max(14, redisPrefs.fontSize)));
+          }
+        }
         const localProgress = loadReadingProgress(currentUser.id, document.id);
         const storedProgress = validProgress(document.reading_progress) ? document.reading_progress : null;
-        const savedProgress = validProgress(localProgress)
-          && (!storedProgress || (localProgress.updatedAt || 0) > (storedProgress.updatedAt || 0))
-          ? localProgress
-          : storedProgress;
+        const candidates = [localProgress, redisProgress, storedProgress].filter(validProgress);
+        candidates.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        const savedProgress = candidates[0] || null;
         progressIdentityRef.current = { userId: currentUser.id, documentId: document.id };
         progressWriteWarningRef.current = false;
         progressSyncWarningRef.current = false;
@@ -374,28 +408,187 @@ export default function ReaderApp() {
     } catch (cause) {
       console.warn("Không thể lưu tùy chỉnh trình đọc.", cause);
     }
-  }, [theme, fontSize]);
+    if (user?.id) {
+      saveRedisReaderPreferences(user.id, { theme, fontSize });
+    }
+  }, [theme, fontSize, user?.id]);
+
+  const previousPage = useCallback(() => {
+    if (isPdf) pdfRef.current?.previous();
+    else if (isAzw3) azw3Ref.current?.previous();
+    else if (isEpub) epubRef.current?.previous()?.catch((cause) => notify(cause.message));
+  }, [isAzw3, isEpub, isPdf, notify]);
+
+  const nextPage = useCallback(() => {
+    if (isPdf) pdfRef.current?.next();
+    else if (isAzw3) azw3Ref.current?.next();
+    else if (isEpub) epubRef.current?.next()?.catch((cause) => notify(cause.message));
+  }, [isAzw3, isEpub, isPdf, notify]);
 
   useEffect(() => {
-    if (!isBook) return undefined;
     function onKeyDown(event) {
+      const tag = event.target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || event.target?.isContentEditable) {
+        if (event.key === "Escape") {
+          setAnnotationsOpen(false);
+          setSearchOpen(false);
+          setTocOpen(false);
+          setShortcutsOpen(false);
+        }
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "f") {
+        if (isPdf || isBook || isText) {
+          event.preventDefault();
+          setSearchOpen(true);
+          setAnnotationsOpen(false);
+          setTocOpen(false);
+          setShortcutsOpen(false);
+        }
+        return;
+      }
       if (event.altKey || event.ctrlKey || event.metaKey) return;
-      if (event.key === "ArrowLeft" || (!isAzw3 && event.key === "PageUp")) previousPage();
-      if (event.key === "ArrowRight" || (!isAzw3 && event.key === "PageDown")) nextPage();
+
+      switch (event.key) {
+        case "Escape":
+          if (annotationsOpen || searchOpen || tocOpen || shortcutsOpen) {
+            setAnnotationsOpen(false);
+            setSearchOpen(false);
+            setTocOpen(false);
+            setShortcutsOpen(false);
+          } else if (zenMode) {
+            setZenMode(false);
+          }
+          return;
+        case "?":
+          event.preventDefault();
+          setShortcutsOpen((open) => !open);
+          setAnnotationsOpen(false);
+          setSearchOpen(false);
+          setTocOpen(false);
+          return;
+        case "z":
+        case "Z":
+          if (item) setZenMode((current) => !current);
+          return;
+        case "f":
+        case "F":
+          event.preventDefault();
+          if (!window.document.fullscreenElement) {
+            window.document.documentElement.requestFullscreen?.().catch(() => {});
+          } else {
+            window.document.exitFullscreen?.().catch(() => {});
+          }
+          return;
+        case "t":
+        case "T":
+          if (isBook || isText) changeTheme();
+          return;
+        case "m":
+        case "M":
+          if (computedToc.length > 0) {
+            setTocOpen((open) => !open);
+            setAnnotationsOpen(false);
+            setSearchOpen(false);
+            setShortcutsOpen(false);
+          }
+          return;
+        case "n":
+        case "N":
+          if (item) {
+            setAnnotationsOpen((open) => !open);
+            setSearchOpen(false);
+            setTocOpen(false);
+            setShortcutsOpen(false);
+          }
+          return;
+        case "b":
+        case "B":
+          if ((isPdf || isBook) && readerReady) {
+            createAnnotation("bookmark").catch((cause) => notify(cause.message));
+          }
+          return;
+        case "/":
+          if (isPdf || isBook || isText) {
+            event.preventDefault();
+            setSearchOpen((open) => !open);
+            setAnnotationsOpen(false);
+            setTocOpen(false);
+            setShortcutsOpen(false);
+          }
+          return;
+        case "+":
+        case "=":
+          if (isPdf) pdfRef.current?.zoomIn();
+          else if (isBook || isText) setFontSize((size) => Math.min(30, Math.max(14, size + 2)));
+          return;
+        case "-":
+        case "_":
+          if (isPdf) pdfRef.current?.zoomOut();
+          else if (isBook || isText) setFontSize((size) => Math.min(30, Math.max(14, size - 2)));
+          return;
+        case "0":
+          if (isPdf) pdfRef.current?.resetZoom();
+          else if (isBook || isText) setFontSize(19);
+          return;
+        case "ArrowLeft":
+        case "PageUp":
+        case "k":
+        case "K":
+          if (isPdf || isBook) {
+            event.preventDefault();
+            previousPage();
+          }
+          return;
+        case "ArrowRight":
+        case "PageDown":
+        case "j":
+        case "J":
+          if (isPdf || isBook) {
+            event.preventDefault();
+            nextPage();
+          }
+          return;
+        case " ":
+          if (isPdf || isBook) {
+            event.preventDefault();
+            if (event.shiftKey) previousPage();
+            else nextPage();
+          }
+          return;
+        case "Home":
+          if (isPdf) { event.preventDefault(); pdfRef.current?.first(); }
+          else if (isAzw3) { event.preventDefault(); azw3Ref.current?.first(); }
+          return;
+        case "End":
+          if (isPdf) { event.preventDefault(); pdfRef.current?.last(); }
+          else if (isAzw3) { event.preventDefault(); azw3Ref.current?.last(); }
+          return;
+        default:
+          break;
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [chapterIndex, chapterCount, isAzw3, isBook]);
-
-  const previousPage = useCallback(() => {
-    if (isAzw3) azw3Ref.current?.previous();
-    else epubRef.current?.previous()?.catch((cause) => notify(cause.message));
-  }, [isAzw3, notify]);
-
-  const nextPage = useCallback(() => {
-    if (isAzw3) azw3Ref.current?.next();
-    else epubRef.current?.next()?.catch((cause) => notify(cause.message));
-  }, [isAzw3, notify]);
+  }, [
+    annotationsOpen,
+    chapterCount,
+    chapterIndex,
+    computedToc.length,
+    isAzw3,
+    isBook,
+    isPdf,
+    isText,
+    item,
+    nextPage,
+    notify,
+    previousPage,
+    readerReady,
+    searchOpen,
+    shortcutsOpen,
+    tocOpen,
+    zenMode,
+  ]);
 
   function changeTheme() {
     setTheme((current) => THEMES[(THEMES.indexOf(current) + 1) % THEMES.length]);
@@ -411,6 +604,7 @@ export default function ReaderApp() {
       return;
     }
     setItem((current) => ({ ...current, status }));
+    invalidateCachedLibrarySnapshot(user.id);
     notify(status === "read" ? "Đã đánh dấu đã đọc." : "Đã chuyển về chưa đọc.");
   }
 
@@ -547,7 +741,7 @@ export default function ReaderApp() {
 
   const backLink = import.meta.env.BASE_URL;
   return (
-    <main className={`reader-app reader-theme-${theme}`}>
+    <main className={`reader-app reader-theme-${theme}${zenMode ? " is-zen" : ""}`}>
       <header className="reader-header">
         <a className="reader-back" href={backLink}><span><ArrowLeft size={19} /></span> Thư viện</a>
         <div className="reader-book-heading">
@@ -558,18 +752,39 @@ export default function ReaderApp() {
           <button className="reader-header-button" type="button" onClick={downloadBook} disabled={!blob} aria-label="Tải sách xuống" title="Tải sách xuống"><Download size={18} /></button>
           <button className={`reader-header-button${item?.status === "read" ? " is-read" : ""}`} type="button" onClick={toggleRead} disabled={!item} aria-label={item?.status === "read" ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"} title={item?.status === "read" ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"}><Check size={18} /></button>
           {(isPdf || isBook) && <button className="reader-header-button" type="button" onClick={() => createAnnotation("bookmark").catch((cause) => notify(cause.message))} disabled={!readerReady} aria-label="Thêm dấu trang" title="Thêm dấu trang"><BookmarkPlus size={18} /></button>}
-          <button className={`reader-header-button${annotationsOpen ? " is-read" : ""}`} type="button" onClick={() => { setAnnotationsOpen((open) => !open); setSearchOpen(false); }} disabled={!item} aria-label="Mở dấu trang và ghi chú" title="Dấu trang và ghi chú"><NotebookPen size={18} /></button>
+          <button className={`reader-header-button${annotationsOpen ? " is-read" : ""}`} type="button" onClick={() => { setAnnotationsOpen((open) => !open); setSearchOpen(false); setTocOpen(false); setShortcutsOpen(false); }} disabled={!item} aria-label="Mở dấu trang và ghi chú" title="Dấu trang và ghi chú (phím N)">
+            <NotebookPen size={18} />
+            {annotations.length > 0 && <em className="reader-badge">{annotations.length}</em>}
+          </button>
           <button className={`reader-header-button${offlineAvailable ? " is-read" : ""}`} type="button" onClick={toggleOfflineCopy} disabled={!blob || offlineBusy} aria-label={offlineAvailable ? "Xóa bản offline" : "Lưu để đọc offline"} title={offlineAvailable ? "Xóa bản offline" : "Lưu để đọc offline"}><CloudDownload size={18} /></button>
           <button className="reader-header-button" type="button" onClick={anchorCurrentFileHash} disabled={!blob || blockchainBusy || !isHashRegistryConfigured} aria-label={isHashRegistryConfigured ? "Neo hash file lên Sepolia" : "Neo hash (chưa cấu hình smart contract)"} title={isHashRegistryConfigured ? "Neo hash file lên Sepolia (công khai)" : "Cần triển khai FileHashRegistry và cấu hình địa chỉ"}><Fingerprint size={18} /></button>
-          {(isPdf || isBook || isText) && <button className={`reader-header-button${searchOpen ? " is-read" : ""}`} type="button" onClick={() => { setSearchOpen((open) => !open); setAnnotationsOpen(false); }} disabled={!readerReady && !isText} aria-label="Tìm trong tài liệu" title="Tìm trong tài liệu"><Search size={18} /></button>}
+          {(isPdf || isBook || isText) && <button className={`reader-header-button${searchOpen ? " is-read" : ""}`} type="button" onClick={() => { setSearchOpen((open) => !open); setAnnotationsOpen(false); setTocOpen(false); setShortcutsOpen(false); }} disabled={!readerReady && !isText} aria-label="Tìm trong tài liệu" title="Tìm trong tài liệu (phím / hoặc Ctrl+F)"><Search size={18} /></button>}
+          {item && <button className={`reader-header-button${zenMode ? " is-read" : ""}`} type="button" onClick={() => setZenMode((current) => !current)} aria-label="Chế độ tập trung" title="Chế độ tập trung (phím Z)"><Eye size={18} /></button>}
+          <button className={`reader-header-button${shortcutsOpen ? " is-read" : ""}`} type="button" onClick={() => { setShortcutsOpen((open) => !open); setAnnotationsOpen(false); setSearchOpen(false); setTocOpen(false); }} aria-label="Phím tắt bàn phím" title="Phím tắt bàn phím (phím ?)"><Keyboard size={18} /></button>
         </div>
       </header>
+      {zenMode && (
+        <button
+          type="button"
+          className="reader-zen-exit"
+          onClick={() => setZenMode(false)}
+          aria-label="Thoát chế độ tập trung"
+          title="Hiện lại thanh công cụ (Z hoặc Esc)"
+        >
+          <EyeOff size={15} />
+          <span>Hiện thanh công cụ</span>
+        </button>
+      )}
       {readerWarning && <div className="reader-feature-warning" role="status">{readerWarning}</div>}
-      {isBook && item && (
+      {(isBook || isText) && item && (
         <ReaderToolbar
-          location={isAzw3 ? `Chương ${chapterIndex + 1} / ${chapterCount}` : location}
+          location={isAzw3 ? `Chương ${chapterIndex + 1} / ${chapterCount}` : isText ? `Văn bản · ${progressDetails?.percent ?? 0}%` : location}
           theme={theme}
           fontSize={fontSize}
+          showNavigation={isBook}
+          hasToc={computedToc.length > 0}
+          tocOpen={tocOpen}
+          onToggleToc={() => { setTocOpen((open) => !open); setAnnotationsOpen(false); setSearchOpen(false); }}
           onPrevious={previousPage}
           onNext={nextPage}
           onFont={(delta) => setFontSize((size) => Math.min(30, Math.max(14, size + delta)))}
@@ -602,14 +817,42 @@ export default function ReaderApp() {
         {error && <div className="reader-error"><span className="reader-error-icon">!</span><h2>Chưa mở được tài liệu</h2><p>{error}</p><a className="reader-return-link" href={backLink}>Quay về thư viện</a></div>}
         {blob && progressReady && isPdf && <PdfReader ref={pdfRef} blob={blob} initialProgress={readingProgress} onProgress={handleProgress} onReady={handleReady} />}
         {blob && isImage && <div className="image-reader"><img src={objectUrl} alt={item.name} /></div>}
-        {blob && isText && <pre ref={textReaderRef} className="text-reader" onScroll={handleTextScroll}>{textContent}</pre>}
+        {blob && isText && <pre ref={textReaderRef} className="text-reader" style={{ fontSize: `${fontSize}px` }} onScroll={handleTextScroll}>{textContent}</pre>}
         {blob && progressReady && isEpub && (
           <Suspense fallback={null}>
-            <EpubReader ref={epubRef} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} onLocation={handleLocation} onProgress={handleProgress} onReady={handleReady} />
+            <EpubReader ref={epubRef} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} onLocation={handleLocation} onProgress={handleProgress} onToc={setTocItems} onReady={handleReady} />
           </Suspense>
         )}
         {blob && progressReady && isAzw3 && <Azw3Reader ref={azw3Ref} key={item.id} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} chapterIndex={chapterIndex} onChapter={handleChapter} onNext={nextPage} onPrevious={previousPage} onProgress={handleProgress} onReady={handleReady} />}
       </section>
+      {tocOpen && computedToc.length > 0 && (
+        <aside className="reader-toc-panel" aria-label="Mục lục sách">
+          <header className="reader-annotations-header">
+            <div><strong>Mục lục</strong><span>{computedToc.length} mục</span></div>
+            <button className="reader-annotation-icon" type="button" onClick={() => setTocOpen(false)} aria-label="Đóng mục lục"><X size={18} /></button>
+          </header>
+          <div className="reader-toc-list">
+            {computedToc.map((entry, idx) => {
+              const isActive = isAzw3 && entry.chapterIndex === chapterIndex;
+              return (
+                <button
+                  key={`${entry.id}-${idx}`}
+                  type="button"
+                  className={`reader-toc-item${isActive ? " is-active" : ""}`}
+                  style={{ paddingLeft: `${12 + Math.min(entry.depth || 0, 4) * 14}px` }}
+                  onClick={() => {
+                    if (isEpub) epubRef.current?.goTo({ href: entry.href });
+                    else if (isAzw3) azw3Ref.current?.goTo({ chapterIndex: entry.chapterIndex });
+                    setTocOpen(false);
+                  }}
+                >
+                  {entry.label}
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+      )}
       <ReaderAnnotations
         open={annotationsOpen}
         annotations={annotations}
@@ -620,6 +863,28 @@ export default function ReaderApp() {
         onJump={jumpTo}
       />
       <ReaderSearch open={searchOpen} onClose={() => setSearchOpen(false)} onSearch={searchDocument} />
+      {shortcutsOpen && (
+        <aside className="reader-shortcuts-panel" aria-label="Phím tắt bàn phím">
+          <header className="reader-annotations-header">
+            <div><strong>Phím tắt bàn phím</strong><span>Thao tác nhanh khi đọc</span></div>
+            <button className="reader-annotation-icon" type="button" onClick={() => setShortcutsOpen(false)} aria-label="Đóng bảng phím tắt"><X size={18} /></button>
+          </header>
+          <dl className="reader-shortcuts-list">
+            <div><dt><kbd>←</kbd> <kbd>→</kbd> / <kbd>J</kbd> <kbd>K</kbd></dt><dd>Trang hoặc chương trước / tiếp</dd></div>
+            <div><dt><kbd>Space</kbd> / <kbd>Shift</kbd>+<kbd>Space</kbd></dt><dd>Tiến / lùi trang</dd></div>
+            <div><dt><kbd>Home</kbd> / <kbd>End</kbd></dt><dd>Đầu / cuối tài liệu (PDF, AZW3)</dd></div>
+            <div><dt><kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd></dt><dd>Tăng / giảm / mặc định cỡ chữ hoặc thu phóng</dd></div>
+            <div><dt><kbd>T</kbd></dt><dd>Đổi giao diện Sáng · Sepia · Tối</dd></div>
+            <div><dt><kbd>M</kbd></dt><dd>Mở / đóng Mục lục</dd></div>
+            <div><dt><kbd>B</kbd></dt><dd>Thêm dấu trang tại vị trí hiện tại</dd></div>
+            <div><dt><kbd>N</kbd></dt><dd>Mở / đóng Dấu trang & ghi chú</dd></div>
+            <div><dt><kbd>/</kbd> hoặc <kbd>Ctrl</kbd>+<kbd>F</kbd></dt><dd>Tìm trong tài liệu</dd></div>
+            <div><dt><kbd>Z</kbd></dt><dd>Chế độ tập trung (ẩn thanh công cụ)</dd></div>
+            <div><dt><kbd>F</kbd></dt><dd>Bật / tắt toàn màn hình</dd></div>
+            <div><dt><kbd>?</kbd> / <kbd>Esc</kbd></dt><dd>Mở trợ giúp phím tắt / Đóng bảng</dd></div>
+          </dl>
+        </aside>
+      )}
       {offlineCopyActive && <div className="reader-offline-indicator" role="status">Đang đọc bản đã lưu trên thiết bị</div>}
       {toast && <div className="reader-toast" role="status">{toast}{blockchainTx && <a href={`https://sepolia.etherscan.io/tx/${blockchainTx}`} target="_blank" rel="noreferrer">Xem giao dịch</a>}</div>}
     </main>

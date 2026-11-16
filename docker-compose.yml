@@ -1,4 +1,23 @@
 services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    init: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
   app:
     build:
       context: .
@@ -37,11 +56,15 @@ services:
       target: api
     environment:
       PORT: 3001
-      REDIS_URL: ${REDIS_URL:-redis://host.docker.internal:6379}
+      INSTANCE_ID: api1
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:
       - "3001"
+    depends_on:
+      redis:
+        condition: service_healthy
     init: true
     read_only: true
     tmpfs:
@@ -65,3 +88,10 @@ services:
 
   api2:
     <<: *api
+    environment:
+      PORT: 3001
+      INSTANCE_ID: api2
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+
+volumes:
+  redis_data:
