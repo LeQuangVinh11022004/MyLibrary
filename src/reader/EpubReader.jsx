@@ -96,7 +96,12 @@ export const EpubReader = forwardRef(function EpubReader({
         Object.entries(THEMES).forEach(([name, colors]) => {
           rendition.themes.register(
             `library-${name}`,
-            `body { background: ${colors.background} !important; color: ${colors.color} !important; font-family: Literata, Georgia, serif !important; }`,
+            `body { background: ${colors.background} !important; color: ${colors.color} !important; font-family: Literata, Georgia, serif !important; line-height: 1.75 !important; }
+            p, li, blockquote { line-height: 1.75 !important; }
+            p { margin: 0 0 .85em !important; text-align: left !important; }
+            h1, h2, h3, h4 { line-height: 1.35 !important; color: ${colors.color} !important; }
+            a { color: inherit !important; text-decoration-color: rgba(127, 127, 127, .5) !important; }
+            img, svg, video { max-width: 100% !important; height: auto !important; }`,
           );
         });
         rendition.on("relocated", (location) => {

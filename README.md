@@ -78,6 +78,8 @@ The app is then available at `http://localhost:8080`. Nginx serves the frontend 
 
 The Redis URL is configured with `REDIS_URL` in `docker.env`. Use a Redis instance you control, and secure it with authentication and a firewall. Do not expose it to the public internet.
 
+The Redis API is enabled in the Docker build by default. Static deployments such as Vercel and GitHub Pages should leave `VITE_REDIS_API_ENABLED` unset or set it to `false`; reader progress and preferences continue to use local storage and Supabase.
+
 Useful commands:
 
 ```bash

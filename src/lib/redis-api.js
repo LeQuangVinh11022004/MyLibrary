@@ -1,6 +1,7 @@
 const REQUEST_TIMEOUT_MS = 1800;
+const REDIS_API_ENABLED = import.meta.env.VITE_REDIS_API_ENABLED === "true";
 
-async function apiRequest(path, options = {}) {
+async function request(path, options = {}) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -19,6 +20,13 @@ async function apiRequest(path, options = {}) {
   } finally {
     window.clearTimeout(timer);
   }
+}
+
+async function apiRequest(path, options = {}) {
+  if (!REDIS_API_ENABLED) {
+    return { ok: false, status: 404, data: null };
+  }
+  return request(path, options);
 }
 
 export async function fetchApiHealth() {
