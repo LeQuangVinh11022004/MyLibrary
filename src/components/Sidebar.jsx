@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { BookOpen, Clock3, Database, Folder, FolderPlus, Heart, LibraryBig, Plus, RefreshCw, Upload, X } from "lucide-react";
+import { BookOpen, Clock3, Database, Folder, FolderPlus, Heart, LibraryBig, Plus, RefreshCw, ShieldAlert, Upload, X } from "lucide-react";
 import { getFolderPath } from "../lib/library-utils";
 import { fetchApiHealth } from "../lib/redis-api";
 
@@ -11,8 +11,8 @@ const NAV_ITEMS = [
 ];
 
 export function Sidebar({
-  user, view, folderId, folders, documents, open, onClose, onViewChange, onFolderSelect,
-  onUpload, onUploadFolder, onCreateFolder, onAuth, onSignOut,
+  user, sessions = [], maxSessions = 3, view, folderId, folders, documents, open, onClose, onViewChange, onFolderSelect,
+  onUpload, onUploadFolder, onCreateFolder, onAuth, onSignOut, onRevokeOtherSessions,
 }) {
   const [apiHealth, setApiHealth] = useState(null);
   const [checkingHealth, setCheckingHealth] = useState(false);
@@ -108,6 +108,24 @@ export function Sidebar({
                   ? "API đang chạy nhưng chưa kết nối được Redis (6379)."
                   : "Chạy npm run start:api hoặc docker compose up để bật Redis cache."}
             </p>
+            <div className="security-status-meta">
+              <span>🛡️ SHA-256 Proof-of-Work · Anti-Crawl & Rate Limit</span>
+              {user && (
+                <span>
+                  Phiên hoạt động: <strong>{Math.max(1, sessions.length)}/{maxSessions}</strong> thiết bị
+                </span>
+              )}
+              {user && sessions.length > 1 && onRevokeOtherSessions && (
+                <button
+                  type="button"
+                  className="revoke-sessions-btn"
+                  onClick={onRevokeOtherSessions}
+                  title="Đăng xuất khỏi tất cả các thiết bị khác"
+                >
+                  <ShieldAlert size={13} /> Thu hồi {sessions.length - 1} phiên khác
+                </button>
+              )}
+            </div>
           </div>
           <div className="profile">
             <div className="avatar">{user ? "M" : "?"}</div>

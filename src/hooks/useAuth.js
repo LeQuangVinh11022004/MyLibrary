@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  fetchActiveSessions,
+  registerActiveSession,
+  revokeUserSession,
+  verifyAuthRateLimit,
+} from "../lib/redis-api";
 import { isSupabaseConfigured, supabase, supabaseSetupMessage } from "../lib/supabase";
 
 const SAVED_ACCESS_CODE_KEY = "trang-sach-saved-access-code";
@@ -23,27 +29,81 @@ async function checkSignupSettings() {
   if (settings.mailer_autoconfirm !== true) throw new Error("Hãy tắt Confirm email trong cài đặt Email của Supabase.");
 }
 
-export function useAuth() {
+export function useAuth(notify) {
   const [user, setUser] = useState(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [initialCode, setInitialCode] = useState("");
   const [createdCode, setCreatedCode] = useState("");
+  const [sessions, setSessions] = useState([]);
+  const [maxSessions, setMaxSessions] = useState(3);
+
+  const syncDeviceSession = useCallback(async (activeUser, shouldRegister = false) => {
+    if (!activeUser?.id) {
+      setSessions([]);
+      return;
+    }
+    if (shouldRegister) {
+      const reg = await registerActiveSession(activeUser.id);
+      if (reg?.sessions) {
+        setSessions(reg.sessions);
+        if (reg.maxSessions) setMaxSessions(reg.maxSessions);
+        if (reg.evictedCount > 0 && notify) {
+          notify(`Đã thu hồi ${reg.evictedCount} phiên cũ do vượt giới hạn ${reg.maxSessions} thiết bị.`);
+        }
+        return;
+      }
+    }
+    const status = await fetchActiveSessions(activeUser.id);
+    if (!status) return;
+    if (status.maxSessions) setMaxSessions(status.maxSessions);
+    if (status.currentActive === false) {
+      await supabase?.auth.signOut();
+      setUser(null);
+      setSessions([]);
+      if (notify) notify("Phiên đăng nhập trên thiết bị này đã hết hạn hoặc bị thu hồi.");
+      return;
+    }
+    if (status.sessions?.length) {
+      setSessions(status.sessions);
+    } else {
+      const reg = await registerActiveSession(activeUser.id);
+      if (reg?.sessions) setSessions(reg.sessions);
+    }
+  }, [notify]);
 
   useEffect(() => {
     if (!supabase) return undefined;
     let active = true;
     supabase.auth.getSession().then(({ data, error }) => {
       if (error) throw error;
-      if (active) setUser(data.session?.user || null);
+      const sessionUser = data.session?.user || null;
+      if (active) {
+        setUser(sessionUser);
+        if (sessionUser) syncDeviceSession(sessionUser, false);
+      }
     }).catch((error) => console.error("Không thể khôi phục phiên đăng nhập.", error));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextUser = session?.user || null;
+      setUser(nextUser);
+      if (event === "SIGNED_IN" && nextUser) {
+        syncDeviceSession(nextUser, true);
+      } else if (event === "SIGNED_OUT") {
+        setSessions([]);
+      }
     });
     return () => {
       active = false;
       listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [syncDeviceSession]);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    const timer = window.setInterval(() => {
+      syncDeviceSession(user, false);
+    }, 45_000);
+    return () => window.clearInterval(timer);
+  }, [syncDeviceSession, user]);
 
   const openAuth = useCallback(() => {
     setInitialCode(savedCode());
@@ -58,12 +118,29 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     if (!supabase) return;
+    if (user?.id) {
+      await revokeUserSession(user.id, { keepCurrent: false });
+    }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
-  }, []);
+  }, [user?.id]);
 
-  const authenticate = useCallback(async ({ mode, code, remember }) => {
+  const revokeOtherSessions = useCallback(async () => {
+    if (!user?.id) return;
+    const result = await revokeUserSession(user.id, { keepCurrent: true });
+    if (result?.sessions) {
+      setSessions(result.sessions);
+      if (notify) notify("Đã đăng xuất khỏi tất cả các thiết bị khác.");
+    }
+  }, [notify, user?.id]);
+
+  const authenticate = useCallback(async ({ mode, code, remember, honeypot = "" }) => {
     if (!isSupabaseConfigured || !supabase) throw new Error(supabaseSetupMessage);
+    if (honeypot && honeypot.trim() !== "") {
+      throw new Error("Phát hiện yêu cầu tự động không hợp lệ.");
+    }
+    await verifyAuthRateLimit({ mode, honeypot });
+
     if (mode === "signup") {
       await checkSignupSettings();
       const accessCode = crypto.randomUUID().toLowerCase();
@@ -100,9 +177,12 @@ export function useAuth() {
     authOpen,
     initialCode,
     createdCode,
+    sessions,
+    maxSessions,
     openAuth,
     closeAuth,
     signOut,
+    revokeOtherSessions,
     authenticate,
   };
 }

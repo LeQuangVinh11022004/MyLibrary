@@ -1,14 +1,23 @@
-const REQUEST_TIMEOUT_MS = 1800;
-const REDIS_API_ENABLED = import.meta.env.VITE_REDIS_API_ENABLED === "true";
+import {
+  getDeviceId,
+  getDeviceLabel,
+  getSecurityHeaders,
+  solvePowChallenge,
+} from "./security-shield";
+
+const REQUEST_TIMEOUT_MS = 2000;
+const REDIS_API_ENABLED = import.meta.env.VITE_REDIS_API_ENABLED !== "false";
 
 async function request(path, options = {}) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
+    const securityHeaders = getSecurityHeaders();
     const response = await fetch(path, {
       ...options,
       headers: {
         "Content-Type": "application/json",
+        ...securityHeaders,
         ...(options.headers || {}),
       },
       signal: controller.signal,
@@ -37,8 +46,58 @@ export async function fetchApiHealth() {
     redis: data.redis || "unavailable",
     instance: data.instance || null,
     cachedKeys: Number.isFinite(data.cachedKeys) ? data.cachedKeys : null,
+    maxSessions: data.maxSessions ?? 3,
+    powDifficulty: data.powDifficulty ?? 3,
     uptimeSeconds: data.uptimeSeconds ?? null,
   };
+}
+
+export async function verifyAuthRateLimit({ mode, honeypot = "" } = {}) {
+  let pow = null;
+  const challengeRes = await apiRequest("/api/auth/challenge", { method: "GET" });
+  if (challengeRes.ok && challengeRes.data?.nonce) {
+    pow = await solvePowChallenge(challengeRes.data.nonce, challengeRes.data.difficulty);
+  }
+  const { ok, status, data } = await apiRequest("/api/auth/guard", {
+    method: "POST",
+    body: JSON.stringify({ mode, honeypot, pow }),
+  });
+  if (status === 429 || status === 403 || status === 401) {
+    throw new Error(data?.error || "Yêu cầu bị từ chối bởi bộ lọc chống spam/bot.");
+  }
+  return ok ? data : { allowed: true };
+}
+
+export async function registerActiveSession(userId) {
+  if (!userId) return null;
+  const { ok, data } = await apiRequest(`/api/sessions?userId=${encodeURIComponent(userId)}`, {
+    method: "POST",
+    body: JSON.stringify({
+      deviceId: getDeviceId(),
+      label: getDeviceLabel(),
+    }),
+  });
+  return ok ? data : null;
+}
+
+export async function fetchActiveSessions(userId) {
+  if (!userId) return null;
+  const query = `userId=${encodeURIComponent(userId)}&deviceId=${encodeURIComponent(getDeviceId())}`;
+  const { ok, data } = await apiRequest(`/api/sessions?${query}`, { method: "GET" });
+  return ok ? data : null;
+}
+
+export async function revokeUserSession(userId, { keepCurrent = false, deviceId = getDeviceId() } = {}) {
+  if (!userId) return null;
+  const query = new URLSearchParams({
+    userId,
+    deviceId,
+    ...(keepCurrent ? { keepCurrent: "true" } : {}),
+  });
+  const { ok, data } = await apiRequest(`/api/sessions?${query.toString()}`, {
+    method: "DELETE",
+  });
+  return ok ? data : null;
 }
 
 export async function getCachedLibrarySnapshot(userId) {

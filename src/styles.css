@@ -667,6 +667,10 @@ html { color-scheme: light; scroll-behavior: smooth; -webkit-tap-highlight-color
 .redis-status-head strong { flex: 1; margin: 0; }
 .redis-status-head .privacy-icon { margin: 0; width: 28px; height: 28px; }
 .redis-refresh { width: 26px; height: 26px; min-width: 26px; min-height: 26px; }
+.security-status-meta { display: grid; gap: 4px; margin-top: 8px; padding-top: 7px; border-top: 1px dashed #d6e2d3; font-size: 11px; color: #47624c; }
+.revoke-sessions-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; margin-top: 3px; padding: 5px 8px; border: 1px solid #dfcabf; border-radius: 8px; background: #fff7f4; color: #9c4a38; font-size: 11px; font-weight: 600; cursor: pointer; }
+.revoke-sessions-btn:hover { background: #fbece6; border-color: #d1b0a1; }
+.auth-shield-badge { display: flex; align-items: center; gap: 7px; margin: 10px 0 4px; padding: 8px 10px; border: 1px solid #d7e4d4; border-radius: 10px; background: #f3f8f1; color: #3d6347; font-size: 11.5px; line-height: 1.4; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

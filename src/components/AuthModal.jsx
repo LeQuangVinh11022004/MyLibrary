@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { Check, Copy, Download, KeyRound, X } from "lucide-react";
+import { Check, Copy, Download, KeyRound, ShieldCheck, X } from "lucide-react";
 
 export function AuthModal({ open, initialCode, createdCode, onClose, onAuthenticate }) {
   const [mode, setMode] = useState("signin");
   const [code, setCode] = useState(initialCode);
+  const [honeypot, setHoneypot] = useState("");
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
   const [copied, setCopied] = useState(false);
   const [hasSavedCode, setHasSavedCode] = useState(Boolean(initialCode));
 
@@ -14,6 +16,7 @@ export function AuthModal({ open, initialCode, createdCode, onClose, onAuthentic
     if (open) {
       setMode("signin");
       setCode(initialCode);
+      setHoneypot("");
       setHasSavedCode(Boolean(initialCode));
       setError("");
       setRemember(true);
@@ -24,11 +27,18 @@ export function AuthModal({ open, initialCode, createdCode, onClose, onAuthentic
 
   async function submit(event) {
     event.preventDefault();
+    const now = Date.now();
+    if (now < cooldownUntil) {
+      const waitSeconds = Math.ceil((cooldownUntil - now) / 1000);
+      setError(`Vui lòng đợi ${waitSeconds} giây trước khi thử lại.`);
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      await onAuthenticate({ mode, code, remember });
+      await onAuthenticate({ mode, code, remember, honeypot });
     } catch (cause) {
+      setCooldownUntil(Date.now() + 2500);
       setError(cause.message || "Không thể xác thực mã ID. Hãy thử lại.");
     } finally {
       setBusy(false);
@@ -39,7 +49,7 @@ export function AuthModal({ open, initialCode, createdCode, onClose, onAuthentic
     try {
       await navigator.clipboard.writeText(createdCode);
       setCopied(true);
-    } catch (cause) {
+    } catch {
       setError("Không thể sao chép tự động. Hãy chọn và sao chép mã bên trên.");
     }
   }
@@ -90,6 +100,16 @@ export function AuthModal({ open, initialCode, createdCode, onClose, onAuthentic
               ? "Nhập mã ID để mở những cuốn sách của bạn."
               : "Tạo một mã ID ngẫu nhiên để dùng làm chìa khóa đăng nhập."}</p>
             <form onSubmit={submit}>
+              <div className="visually-hidden" aria-hidden="true">
+                <label>Website
+                  <input
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={honeypot}
+                    onChange={(event) => setHoneypot(event.target.value)}
+                  />
+                </label>
+              </div>
               {mode === "signin" ? (
                 <>
                   <label className="form-label">Mã ID
@@ -104,8 +124,12 @@ export function AuthModal({ open, initialCode, createdCode, onClose, onAuthentic
                   <label><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} /> Ghi nhớ mã trên thiết bị này</label>
                 </div>
               )}
+              <div className="auth-shield-badge" role="note">
+                <ShieldCheck size={15} />
+                <span>Bảo vệ bằng SHA-256 Proof-of-Work & giới hạn tối đa 3 phiên Redis</span>
+              </div>
               {error && <p className="form-error" role="alert">{error}</p>}
-              <button className="button button-primary full-width auth-submit" type="submit" disabled={busy}>{busy ? "Đang kết nối…" : mode === "signin" ? "Đăng nhập" : "Tạo mã ID"}</button>
+              <button className="button button-primary full-width auth-submit" type="submit" disabled={busy}>{busy ? "Đang xác thực…" : mode === "signin" ? "Đăng nhập" : "Tạo mã ID"}</button>
             </form>
             <p className="auth-switch">{mode === "signin" ? "Chưa có tài khoản?" : "Đã có mã ID?"}{" "}
               <button type="button" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(""); }}> {mode === "signin" ? "Tạo tài khoản" : "Đăng nhập"}</button>

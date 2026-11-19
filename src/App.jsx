@@ -31,12 +31,12 @@ export default function App() {
   const fileInput = useRef(null);
   const folderInput = useRef(null);
   const toastTimer = useRef(null);
-  const auth = useAuth();
   const notify = useCallback((message) => {
     setToast(message);
     window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(""), 4200);
   }, []);
+  const auth = useAuth(notify);
   const library = useLibrary(auth.user, notify);
 
   const visibleDocuments = useMemo(() => {
@@ -164,6 +164,8 @@ export default function App() {
     <div className="app-shell">
       <Sidebar
         user={auth.user}
+        sessions={auth.sessions}
+        maxSessions={auth.maxSessions}
         view={view}
         folderId={folderId}
         folders={library.folders}
@@ -177,6 +179,7 @@ export default function App() {
         onCreateFolder={() => requireUser() && setFolderDialogOpen(true)}
         onAuth={auth.openAuth}
         onSignOut={signOut}
+        onRevokeOtherSessions={auth.revokeOtherSessions}
       />
       <main className="main-content">
         <TopBar
