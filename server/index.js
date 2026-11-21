@@ -13,8 +13,16 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const CHALLENGE_TTL_SECONDS = 120;
 const POW_DIFFICULTY = Math.min(5, Math.max(2, Number(process.env.POW_DIFFICULTY || 3)));
 const MAX_ACTIVE_SESSIONS = Math.max(1, Number(process.env.MAX_ACTIVE_SESSIONS || 3));
+
+// Configurable Rate Limit Thresholds
 const API_RATE_LIMIT_PER_MIN = Math.max(20, Number(process.env.API_RATE_LIMIT_PER_MIN || 120));
 const AUTH_RATE_LIMIT_5MIN = Math.max(3, Number(process.env.AUTH_RATE_LIMIT_5MIN || 8));
+const CHALLENGE_RATE_LIMIT_PER_MIN = Math.max(5, Number(process.env.CHALLENGE_RATE_LIMIT_PER_MIN || 20));
+const SESSIONS_RATE_LIMIT_PER_MIN = Math.max(5, Number(process.env.SESSIONS_RATE_LIMIT_PER_MIN || 30));
+const CACHE_MUTATE_RATE_LIMIT_PER_MIN = Math.max(5, Number(process.env.CACHE_MUTATE_RATE_LIMIT_PER_MIN || 40));
+const PROGRESS_RATE_LIMIT_PER_MIN = Math.max(10, Number(process.env.PROGRESS_RATE_LIMIT_PER_MIN || 60));
+const PREFS_RATE_LIMIT_PER_MIN = Math.max(5, Number(process.env.PREFS_RATE_LIMIT_PER_MIN || 30));
+
 const MAX_BODY_BYTES = 512 * 1024;
 const startedAt = Date.now();
 
@@ -97,17 +105,56 @@ async function consumeRateLimit(bucket, identifier, maxHits, windowSeconds) {
     const count = await redis.incr(key);
     if (count === 1) {
       await redis.expire(key, windowSeconds);
+    } else {
+      const ttl = await redis.ttl(key);
+      if (ttl === -1) {
+        await redis.expire(key, windowSeconds);
+      }
     }
-    const ttl = count > maxHits ? await redis.ttl(key) : windowSeconds;
+    const currentTtl = await redis.ttl(key);
+    const retryAfter = Math.max(1, currentTtl > 0 ? currentTtl : windowSeconds);
     return {
       allowed: count <= maxHits,
       count,
+      limit: maxHits,
       remaining: Math.max(0, maxHits - count),
-      retryAfter: Math.max(1, ttl > 0 ? ttl : windowSeconds),
+      retryAfter,
+      reset: Math.ceil(Date.now() / 1000) + retryAfter,
     };
   } catch {
-    return { allowed: true, count: 1, remaining: maxHits, retryAfter: 0 };
+    return {
+      allowed: true,
+      count: 1,
+      limit: maxHits,
+      remaining: maxHits,
+      retryAfter: 0,
+      reset: Math.ceil(Date.now() / 1000) + windowSeconds,
+    };
   }
+}
+
+async function enforceRateLimit(response, bucket, identifier, maxHits, windowSeconds, customMessage) {
+  const result = await consumeRateLimit(bucket, identifier, maxHits, windowSeconds);
+  const headers = {
+    "X-RateLimit-Limit": String(result.limit),
+    "X-RateLimit-Remaining": String(result.remaining),
+    "X-RateLimit-Reset": String(result.reset),
+  };
+  if (!result.allowed) {
+    headers["Retry-After"] = String(result.retryAfter);
+    sendJson(
+      response,
+      429,
+      {
+        error: customMessage || `Quá nhiều yêu cầu. Vui lòng thử lại sau ${result.retryAfter} giây.`,
+        retryAfter: result.retryAfter,
+        limit: result.limit,
+      },
+      headers,
+    );
+    return null;
+  }
+  return headers;
 }
 
 async function loadUserSessions(userId) {
@@ -148,6 +195,14 @@ const server = createServer(async (request, response) => {
           cachedKeys,
           maxSessions: MAX_ACTIVE_SESSIONS,
           powDifficulty: POW_DIFFICULTY,
+          limits: {
+            apiPerMin: API_RATE_LIMIT_PER_MIN,
+            auth5Min: AUTH_RATE_LIMIT_5MIN,
+            challengePerMin: CHALLENGE_RATE_LIMIT_PER_MIN,
+            sessionsPerMin: SESSIONS_RATE_LIMIT_PER_MIN,
+            progressPerMin: PROGRESS_RATE_LIMIT_PER_MIN,
+            cacheMutatePerMin: CACHE_MUTATE_RATE_LIMIT_PER_MIN,
+          },
           uptimeSeconds,
         });
       } catch (error) {
@@ -170,21 +225,29 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    const generalLimit = await consumeRateLimit("api", clientIp, API_RATE_LIMIT_PER_MIN, 60);
-    if (!generalLimit.allowed) {
-      sendJson(
-        response,
-        429,
-        {
-          error: `Quá nhiều yêu cầu từ địa chỉ này. Vui lòng thử lại sau ${generalLimit.retryAfter} giây.`,
-          retryAfter: generalLimit.retryAfter,
-        },
-        { "Retry-After": String(generalLimit.retryAfter) },
-      );
-      return;
-    }
+    // 1. General API Rate Limit per IP (120 req/min)
+    const generalHeaders = await enforceRateLimit(
+      response,
+      "api",
+      clientIp,
+      API_RATE_LIMIT_PER_MIN,
+      60,
+      `Quá nhiều yêu cầu từ địa chỉ này. Vui lòng thử lại sau ít phút.`,
+    );
+    if (!generalHeaders) return;
 
+    // 2. PoW Challenge Rate Limit (20 req/min per IP) - Prevents challenge generation spam
     if (pathname === "/api/auth/challenge" && method === "GET") {
+      const challengeHeaders = await enforceRateLimit(
+        response,
+        "challenge",
+        clientIp,
+        CHALLENGE_RATE_LIMIT_PER_MIN,
+        60,
+        `Yêu cầu mã xác thực chống bot quá thường xuyên. Vui lòng thử lại sau ít phút.`,
+      );
+      if (!challengeHeaders) return;
+
       const nonce = randomBytes(16).toString("hex");
       const challengeKey = `trang-sach:pow:${nonce}`;
       await redis.set(challengeKey, JSON.stringify({ ip: clientIp, difficulty: POW_DIFFICULTY }), "EX", CHALLENGE_TTL_SECONDS);
@@ -193,10 +256,11 @@ const server = createServer(async (request, response) => {
         difficulty: POW_DIFFICULTY,
         expiresIn: CHALLENGE_TTL_SECONDS,
         instance: instanceId,
-      });
+      }, challengeHeaders);
       return;
     }
 
+    // 3. Auth Guard Rate Limit (8 attempts / 5 mins per IP) + Honeypot Detection
     if (pathname === "/api/auth/guard" && method === "POST") {
       const body = await readJsonBody(request);
       if (body.honeypot && String(body.honeypot).trim() !== "") {
@@ -207,50 +271,47 @@ const server = createServer(async (request, response) => {
         });
         return;
       }
-      const authLimit = await consumeRateLimit("auth", clientIp, AUTH_RATE_LIMIT_5MIN, 300);
-      if (!authLimit.allowed) {
-        sendJson(
-          response,
-          429,
-          {
-            error: `Bạn đã thử đăng nhập quá nhiều lần. Vui lòng đợi ${authLimit.retryAfter} giây để bảo vệ tài khoản.`,
-            retryAfter: authLimit.retryAfter,
-          },
-          { "Retry-After": String(authLimit.retryAfter) },
-        );
-        return;
-      }
+      const authHeaders = await enforceRateLimit(
+        response,
+        "auth",
+        clientIp,
+        AUTH_RATE_LIMIT_5MIN,
+        300,
+        `Bạn đã thử đăng nhập quá nhiều lần. Vui lòng đợi ít phút để bảo vệ tài khoản.`,
+      );
+      if (!authHeaders) return;
 
       if (body.pow && typeof body.pow === "object") {
         const { nonce, counter } = body.pow;
         if (!nonce || !Number.isInteger(counter) || counter < 0) {
-          sendJson(response, 403, { error: "Bằng chứng chống bot (Proof-of-Work) không hợp lệ." });
+          sendJson(response, 403, { error: "Bằng chứng chống bot (Proof-of-Work) không hợp lệ." }, authHeaders);
           return;
         }
         const challengeKey = `trang-sach:pow:${nonce}`;
         const rawChallenge = await redis.get(challengeKey);
         await redis.del(challengeKey);
         if (!rawChallenge) {
-          sendJson(response, 403, { error: "Phiên xác thực chống bot đã hết hạn. Vui lòng thử lại." });
+          sendJson(response, 403, { error: "Phiên xác thực chống bot đã hết hạn. Vui lòng thử lại." }, authHeaders);
           return;
         }
         const challenge = JSON.parse(rawChallenge);
         const targetPrefix = "0".repeat(challenge.difficulty || POW_DIFFICULTY);
         const digest = createHash("sha256").update(`${nonce}:${counter}`).digest("hex");
         if (!digest.startsWith(targetPrefix)) {
-          sendJson(response, 403, { error: "Xác thực Proof-of-Work không khớp." });
+          sendJson(response, 403, { error: "Xác thực Proof-of-Work không khớp." }, authHeaders);
           return;
         }
       }
 
       sendJson(response, 200, {
         allowed: true,
-        remainingAttempts: authLimit.remaining,
+        remainingAttempts: Number(authHeaders["X-RateLimit-Remaining"]),
         instance: instanceId,
-      });
+      }, authHeaders);
       return;
     }
 
+    // 4. Session Management (GET: unlimited within general limit, POST/DELETE: strictly rate-limited)
     if (pathname === "/api/sessions") {
       const userId = searchParams.get("userId") || "";
       if (!isValidId(userId)) {
@@ -275,6 +336,16 @@ const server = createServer(async (request, response) => {
       }
 
       if (method === "POST") {
+        const sessionRateHeaders = await enforceRateLimit(
+          response,
+          "sessions_post",
+          `${clientIp}:${userId.toLowerCase()}`,
+          SESSIONS_RATE_LIMIT_PER_MIN,
+          60,
+          "Đăng ký phiên thiết bị quá nhanh. Vui lòng thử lại sau.",
+        );
+        if (!sessionRateHeaders) return;
+
         const body = await readJsonBody(request);
         const deviceId = String(body.deviceId || headerDeviceId || "").trim();
         if (!deviceId) {
@@ -306,11 +377,21 @@ const server = createServer(async (request, response) => {
           sessions,
           maxSessions: MAX_ACTIVE_SESSIONS,
           instance: instanceId,
-        });
+        }, sessionRateHeaders);
         return;
       }
 
       if (method === "DELETE") {
+        const revokeRateHeaders = await enforceRateLimit(
+          response,
+          "sessions_del",
+          `${clientIp}:${userId.toLowerCase()}`,
+          15,
+          60,
+          "Thao tác thu hồi phiên quá thường xuyên.",
+        );
+        if (!revokeRateHeaders) return;
+
         const keepCurrent = searchParams.get("keepCurrent") === "true";
         const targetDeviceId = searchParams.get("deviceId") || headerDeviceId;
         let sessions = await loadUserSessions(userId);
@@ -326,11 +407,12 @@ const server = createServer(async (request, response) => {
           sessions,
           maxSessions: MAX_ACTIVE_SESSIONS,
           instance: instanceId,
-        });
+        }, revokeRateHeaders);
         return;
       }
     }
 
+    // 5. Library Cache (GET: general rate limit; PUT/DELETE: 40/min to avoid cache thrashing)
     if (pathname === "/api/cache/library") {
       const userId = searchParams.get("userId") || "";
       if (!isValidId(userId)) {
@@ -349,25 +431,38 @@ const server = createServer(async (request, response) => {
         return;
       }
 
-      if (method === "PUT") {
-        const body = await readJsonBody(request);
-        const payload = {
-          documents: Array.isArray(body.documents) ? body.documents : [],
-          folders: Array.isArray(body.folders) ? body.folders : [],
-          cachedAt: Date.now(),
-        };
-        await redis.set(key, JSON.stringify(payload), "EX", LIBRARY_TTL_SECONDS);
-        sendJson(response, 200, { stored: true, ttlSeconds: LIBRARY_TTL_SECONDS, instance: instanceId });
-        return;
-      }
+      if (method === "PUT" || method === "DELETE") {
+        const mutateHeaders = await enforceRateLimit(
+          response,
+          "cache_mutate",
+          `${clientIp}:${userId.toLowerCase()}`,
+          CACHE_MUTATE_RATE_LIMIT_PER_MIN,
+          60,
+          "Thao tác cập nhật bộ nhớ đệm thư viện quá thường xuyên.",
+        );
+        if (!mutateHeaders) return;
 
-      if (method === "DELETE") {
-        await redis.del(key);
-        sendJson(response, 200, { invalidated: true, instance: instanceId });
-        return;
+        if (method === "PUT") {
+          const body = await readJsonBody(request);
+          const payload = {
+            documents: Array.isArray(body.documents) ? body.documents : [],
+            folders: Array.isArray(body.folders) ? body.folders : [],
+            cachedAt: Date.now(),
+          };
+          await redis.set(key, JSON.stringify(payload), "EX", LIBRARY_TTL_SECONDS);
+          sendJson(response, 200, { stored: true, ttlSeconds: LIBRARY_TTL_SECONDS, instance: instanceId }, mutateHeaders);
+          return;
+        }
+
+        if (method === "DELETE") {
+          await redis.del(key);
+          sendJson(response, 200, { invalidated: true, instance: instanceId }, mutateHeaders);
+          return;
+        }
       }
     }
 
+    // 6. Reading Progress (GET: general limit; PUT: 60/min per user to prevent scroll spam)
     if (pathname === "/api/progress") {
       const userId = searchParams.get("userId") || "";
       const documentId = searchParams.get("documentId") || "";
@@ -389,6 +484,16 @@ const server = createServer(async (request, response) => {
       }
 
       if (method === "PUT") {
+        const progressHeaders = await enforceRateLimit(
+          response,
+          "progress_put",
+          `${clientIp}:${userId.toLowerCase()}`,
+          PROGRESS_RATE_LIMIT_PER_MIN,
+          60,
+          "Đồng bộ tiến độ đọc quá nhanh.",
+        );
+        if (!progressHeaders) return;
+
         const body = await readJsonBody(request);
         if (!body?.progress || typeof body.progress !== "object") {
           sendJson(response, 400, { error: "Missing progress object" });
@@ -400,11 +505,12 @@ const server = createServer(async (request, response) => {
           redis.zadd(recentKey, record.updatedAt, documentId.toLowerCase()),
           redis.expire(recentKey, PROGRESS_TTL_SECONDS),
         ]);
-        sendJson(response, 200, { stored: true, instance: instanceId, progress: record });
+        sendJson(response, 200, { stored: true, instance: instanceId, progress: record }, progressHeaders);
         return;
       }
     }
 
+    // 7. Preferences (GET: general limit; PUT: 30/min per user)
     if (pathname === "/api/preferences") {
       const userId = searchParams.get("userId") || "";
       if (!isValidId(userId)) {
@@ -424,6 +530,16 @@ const server = createServer(async (request, response) => {
       }
 
       if (method === "PUT") {
+        const prefsHeaders = await enforceRateLimit(
+          response,
+          "prefs_put",
+          `${clientIp}:${userId.toLowerCase()}`,
+          PREFS_RATE_LIMIT_PER_MIN,
+          60,
+          "Lưu tùy chỉnh giao diện quá nhanh.",
+        );
+        if (!prefsHeaders) return;
+
         const body = await readJsonBody(request);
         const prefs = {
           theme: ["light", "sepia", "dark"].includes(body.theme) ? body.theme : "light",
@@ -433,7 +549,7 @@ const server = createServer(async (request, response) => {
           updatedAt: Date.now(),
         };
         await redis.set(key, JSON.stringify(prefs), "EX", PREFS_TTL_SECONDS);
-        sendJson(response, 200, { stored: true, instance: instanceId, preferences: prefs });
+        sendJson(response, 200, { stored: true, instance: instanceId, preferences: prefs }, prefsHeaders);
         return;
       }
     }

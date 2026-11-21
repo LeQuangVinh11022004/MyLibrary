@@ -48,6 +48,7 @@ export async function fetchApiHealth() {
     cachedKeys: Number.isFinite(data.cachedKeys) ? data.cachedKeys : null,
     maxSessions: data.maxSessions ?? 3,
     powDifficulty: data.powDifficulty ?? 3,
+    limits: data.limits || null,
     uptimeSeconds: data.uptimeSeconds ?? null,
   };
 }
@@ -55,6 +56,9 @@ export async function fetchApiHealth() {
 export async function verifyAuthRateLimit({ mode, honeypot = "" } = {}) {
   let pow = null;
   const challengeRes = await apiRequest("/api/auth/challenge", { method: "GET" });
+  if (challengeRes.status === 429) {
+    throw new Error(challengeRes.data?.error || "Yêu cầu mã xác thực quá thường xuyên. Vui lòng thử lại sau.");
+  }
   if (challengeRes.ok && challengeRes.data?.nonce) {
     pow = await solvePowChallenge(challengeRes.data.nonce, challengeRes.data.difficulty);
   }
@@ -62,7 +66,10 @@ export async function verifyAuthRateLimit({ mode, honeypot = "" } = {}) {
     method: "POST",
     body: JSON.stringify({ mode, honeypot, pow }),
   });
-  if (status === 429 || status === 403 || status === 401) {
+  if (status === 429) {
+    throw new Error(data?.error || `Bạn đã thử quá nhiều lần. Vui lòng đợi ${data?.retryAfter || 60} giây.`);
+  }
+  if (status === 403 || status === 401) {
     throw new Error(data?.error || "Yêu cầu bị từ chối bởi bộ lọc chống spam/bot.");
   }
   return ok ? data : { allowed: true };
