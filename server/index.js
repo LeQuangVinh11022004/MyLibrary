@@ -554,6 +554,53 @@ const server = createServer(async (request, response) => {
       }
     }
 
+    // 8. Translation Proxy (EN <-> VI) with Redis Cache (7 days) & Rate Limit (40/min)
+    if (pathname === "/api/translate" && method === "POST") {
+      const translateHeaders = await enforceRateLimit(
+        response,
+        "translate",
+        clientIp,
+        40,
+        60,
+        "Bạn dịch quá nhanh. Vui lòng đợi một lát rồi thử lại.",
+      );
+      if (!translateHeaders) return;
+
+      const body = await readJsonBody(request);
+      const text = String(body.text || "").replace(/\s+/g, " ").trim().slice(0, 480);
+      const source = body.source === "vi" ? "vi" : "en";
+      const target = body.target === "en" ? "en" : "vi";
+      if (!text || source === target) {
+        sendJson(response, 400, { error: "Đoạn văn bản hoặc ngôn ngữ dịch không hợp lệ." }, translateHeaders);
+        return;
+      }
+
+      const hash = createHash("sha256").update(`${source}|${target}|${text}`).digest("hex").slice(0, 32);
+      const cacheKey = `trang-sach:tr:${source}:${target}:${hash}`;
+      const cached = await redis.get(cacheKey).catch(() => null);
+      if (cached) {
+        sendJson(response, 200, { translation: cached, cached: true, instance: instanceId }, translateHeaders);
+        return;
+      }
+
+      const upstream = await fetch(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${source}|${target}`,
+      );
+      if (!upstream.ok) {
+        sendJson(response, 502, { error: "Dịch vụ dịch đang bận." }, translateHeaders);
+        return;
+      }
+      const data = await upstream.json();
+      const translation = data?.responseData?.translatedText;
+      if (!translation || Number(data?.responseStatus) !== 200) {
+        sendJson(response, 502, { error: "Không dịch được đoạn văn này." }, translateHeaders);
+        return;
+      }
+      await redis.set(cacheKey, translation, "EX", 60 * 60 * 24 * 7).catch(() => {});
+      sendJson(response, 200, { translation, cached: false, instance: instanceId }, translateHeaders);
+      return;
+    }
+
     sendJson(response, 404, { error: "Not found" });
   } catch (error) {
     console.warn(`API error (${method} ${pathname}):`, error.message);

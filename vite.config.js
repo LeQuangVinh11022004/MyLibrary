@@ -10,7 +10,7 @@ const CONTENT_SECURITY_POLICY = [
   `style-src 'self' 'unsafe-inline' blob: https://fonts.googleapis.com${CDN_ORIGIN ? ` ${CDN_ORIGIN}` : ""}`,
   `font-src 'self' data: blob: https://fonts.gstatic.com${CDN_ORIGIN ? ` ${CDN_ORIGIN}` : ""}`,
   `img-src 'self' data: blob:${CDN_ORIGIN ? ` ${CDN_ORIGIN}` : ""}`,
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.mymemory.translated.net",
   "worker-src 'self' blob:",
   "frame-src 'self' blob:",
   "media-src 'self' blob: data:",

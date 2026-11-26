@@ -18,12 +18,18 @@ export const EpubReader = forwardRef(function EpubReader({
   onLocation,
   onProgress,
   onToc,
+  onSection,
+  onSelectText,
   onReady,
 }, ref) {
   const mountRef = useRef(null);
   const bookRef = useRef(null);
   const renditionRef = useRef(null);
   const initialProgressRef = useRef(initialProgress);
+  const onSectionRef = useRef(onSection);
+  const onSelectTextRef = useRef(onSelectText);
+  onSectionRef.current = onSection;
+  onSelectTextRef.current = onSelectText;
   useImperativeHandle(ref, () => ({
     previous: () => renditionRef.current?.prev(),
     next: () => renditionRef.current?.next(),
@@ -107,6 +113,7 @@ export const EpubReader = forwardRef(function EpubReader({
         rendition.on("relocated", (location) => {
           const position = location.start;
           const percentage = position?.percentage;
+          if (position?.href) onSectionRef.current?.(position.href);
           onLocation(Number.isFinite(percentage) ? `${Math.round(percentage * 100)}%` : "Đang đọc");
           if (position?.cfi) {
             onProgress({
@@ -136,6 +143,21 @@ export const EpubReader = forwardRef(function EpubReader({
           if (Math.abs(deltaX) < 55 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
           const pageTurn = deltaX < 0 ? rendition.next() : rendition.prev();
           pageTurn.catch((cause) => console.warn("Không thể chuyển trang EPUB.", cause));
+        });
+        rendition.on("selected", (_cfiRange, contents) => {
+          const frameWindow = contents?.window;
+          const selected = frameWindow?.getSelection();
+          if (!selected || selected.isCollapsed || !selected.rangeCount) return;
+          const rect = selected.getRangeAt(0).getBoundingClientRect();
+          const frameRect = frameWindow.frameElement?.getBoundingClientRect() || { top: 0, left: 0 };
+          onSelectTextRef.current?.(selected.toString(), {
+            top: rect.top + frameRect.top,
+            bottom: rect.bottom + frameRect.top,
+            left: rect.left + frameRect.left,
+            right: rect.right + frameRect.left,
+            width: rect.width,
+            height: rect.height,
+          });
         });
         rendition.on("keyup", (event) => {
           window.dispatchEvent(new KeyboardEvent("keydown", {

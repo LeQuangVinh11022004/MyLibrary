@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, BookmarkPlus, Check, CloudDownload, Download, Eye, EyeOff, Fingerprint, Keyboard, LoaderCircle, NotebookPen, Search, X } from "lucide-react";
+import { ArrowLeft, BookmarkPlus, Check, CloudDownload, Download, Eye, EyeOff, Fingerprint, Keyboard, Languages, ListTree, LoaderCircle, NotebookPen, Search, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { formatFileSize } from "../lib/library-utils";
 import { anchorOrVerifyFileHash, isHashRegistryConfigured } from "../lib/blockchain";
@@ -7,7 +7,9 @@ import { Azw3Reader } from "./Azw3Reader";
 import { PdfReader } from "./PdfReader";
 import { ReaderAnnotations } from "./ReaderAnnotations";
 import { ReaderSearch } from "./ReaderSearch";
+import { ReaderTocSidebar } from "./ReaderTocSidebar";
 import { ReaderToolbar } from "./ReaderToolbar";
+import { TranslatePopover } from "./TranslatePopover";
 import { cacheDocument, getCachedDocument, removeCachedDocument } from "../lib/offline-cache";
 import {
   fetchRedisReaderPreferences,
@@ -63,7 +65,15 @@ export default function ReaderApp() {
   const [annotationsOpen, setAnnotationsOpen] = useState(false);
   const [readerWarning, setReaderWarning] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [tocOpen, setTocOpen] = useState(false);
+  const [tocOpen, setTocOpen] = useState(() => (
+    window.innerWidth >= 900
+    && savedPreference("trang-sach-reader-toc-open", window.innerWidth >= 1100 ? "1" : "0") === "1"
+  ));
+  const [pdfToc, setPdfToc] = useState([]);
+  const [currentHref, setCurrentHref] = useState("");
+  const [translateMode, setTranslateMode] = useState(false);
+  const [selection, setSelection] = useState(null);
+  const translateModeRef = useRef(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [tocItems, setTocItems] = useState([]);
   const [zenMode, setZenMode] = useState(false);
@@ -209,6 +219,7 @@ export default function ReaderApp() {
 
   const computedToc = useMemo(() => {
     if (isEpub) return tocItems;
+    if (isPdf) return pdfToc;
     if (isAzw3 && chapterCount > 1) {
       return Array.from({ length: chapterCount }, (_, index) => ({
         id: `chapter-${index}`,
@@ -218,7 +229,95 @@ export default function ReaderApp() {
       }));
     }
     return [];
-  }, [chapterCount, isAzw3, isEpub, tocItems]);
+  }, [chapterCount, isAzw3, isEpub, isPdf, pdfToc, tocItems]);
+
+  const currentPdfPage = readingProgress?.format === "pdf" ? readingProgress.pageNumber : 1;
+  const activeTocId = useMemo(() => {
+    if (!computedToc.length) return null;
+    if (isAzw3) return `chapter-${chapterIndex}`;
+    if (isPdf) {
+      let active = null;
+      for (const entry of computedToc) {
+        if (entry.pageNumber <= currentPdfPage && (!active || entry.pageNumber >= active.pageNumber)) active = entry;
+      }
+      return active?.id ?? null;
+    }
+    if (isEpub && currentHref) {
+      const base = currentHref.split("#")[0];
+      const match = computedToc.find((entry) => {
+        const entryBase = (entry.href || "").split("#")[0];
+        return entryBase && (entryBase === base || base.endsWith(entryBase) || entryBase.endsWith(base));
+      });
+      return match?.id ?? null;
+    }
+    return null;
+  }, [chapterIndex, computedToc, currentHref, currentPdfPage, isAzw3, isEpub, isPdf]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("trang-sach-reader-toc-open", tocOpen ? "1" : "0");
+    } catch {
+      // Ignore storage failures; the sidebar still works for this session.
+    }
+  }, [tocOpen]);
+
+  const toggleToc = useCallback(() => setTocOpen((open) => !open), []);
+
+  function selectTocEntry(entry) {
+    if (isEpub) epubRef.current?.goTo({ href: entry.href })?.catch?.((cause) => notify(`Không mở được mục: ${cause.message}`));
+    else if (isAzw3) azw3Ref.current?.goTo({ chapterIndex: entry.chapterIndex });
+    else if (isPdf) pdfRef.current?.goTo({ pageNumber: entry.pageNumber });
+    if (window.innerWidth < 900) setTocOpen(false);
+  }
+
+  useEffect(() => {
+    translateModeRef.current = translateMode;
+    if (!translateMode) setSelection(null);
+  }, [translateMode]);
+
+  const toggleTranslate = useCallback(() => {
+    setTranslateMode((current) => {
+      const next = !current;
+      if (next) window.getSelection()?.removeAllRanges();
+      return next;
+    });
+  }, []);
+
+  const handleSelectedText = useCallback((rawText, rect) => {
+    if (!translateModeRef.current || !rect) return;
+    const text = String(rawText || "").replace(/\s+/g, " ").trim();
+    if (!text || text.length > 2000 || !/\p{L}/u.test(text)) return;
+    setSelection({
+      text,
+      rect: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, width: rect.width, height: rect.height },
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!translateMode) return undefined;
+    function onPointerUp(event) {
+      if (event.target?.closest?.(".translate-popover")) return;
+      window.setTimeout(() => {
+        const current = window.getSelection();
+        if (!current || current.isCollapsed || !current.rangeCount) return;
+        const range = current.getRangeAt(0);
+        const container = range.commonAncestorContainer;
+        const host = container.nodeType === 1 ? container : container.parentElement;
+        if (!host?.closest?.(".text-reader, .pdf-page-card")) return;
+        handleSelectedText(current.toString(), range.getBoundingClientRect());
+      }, 10);
+    }
+    document.addEventListener("mouseup", onPointerUp);
+    document.addEventListener("touchend", onPointerUp);
+    return () => {
+      document.removeEventListener("mouseup", onPointerUp);
+      document.removeEventListener("touchend", onPointerUp);
+    };
+  }, [handleSelectedText, translateMode]);
+
+  useEffect(() => {
+    if (translateMode) notify(isImage ? "Ảnh không có chữ để dịch." : "Đã bật dịch: bôi đen đoạn văn để xem bản dịch Anh ⇄ Việt.");
+  }, [isImage, notify, translateMode]);
 
   useEffect(() => () => {
     window.clearTimeout(toastTimer.current);
@@ -451,7 +550,9 @@ export default function ReaderApp() {
 
       switch (event.key) {
         case "Escape":
-          if (annotationsOpen || searchOpen || tocOpen || shortcutsOpen) {
+          if (selection) {
+            setSelection(null);
+          } else if (annotationsOpen || searchOpen || shortcutsOpen) {
             setAnnotationsOpen(false);
             setSearchOpen(false);
             setTocOpen(false);
@@ -479,6 +580,10 @@ export default function ReaderApp() {
           } else {
             window.document.exitFullscreen?.().catch(() => {});
           }
+          return;
+        case "d":
+        case "D":
+          if (item && !isImage) toggleTranslate();
           return;
         case "t":
         case "T":
@@ -587,6 +692,9 @@ export default function ReaderApp() {
     searchOpen,
     shortcutsOpen,
     tocOpen,
+    toggleTranslate,
+    isImage,
+    selection,
     zenMode,
   ]);
 
@@ -759,6 +867,8 @@ export default function ReaderApp() {
           <button className={`reader-header-button${offlineAvailable ? " is-read" : ""}`} type="button" onClick={toggleOfflineCopy} disabled={!blob || offlineBusy} aria-label={offlineAvailable ? "Xóa bản offline" : "Lưu để đọc offline"} title={offlineAvailable ? "Xóa bản offline" : "Lưu để đọc offline"}><CloudDownload size={18} /></button>
           <button className="reader-header-button" type="button" onClick={anchorCurrentFileHash} disabled={!blob || blockchainBusy || !isHashRegistryConfigured} aria-label={isHashRegistryConfigured ? "Neo hash file lên Sepolia" : "Neo hash (chưa cấu hình smart contract)"} title={isHashRegistryConfigured ? "Neo hash file lên Sepolia (công khai)" : "Cần triển khai FileHashRegistry và cấu hình địa chỉ"}><Fingerprint size={18} /></button>
           {(isPdf || isBook || isText) && <button className={`reader-header-button${searchOpen ? " is-read" : ""}`} type="button" onClick={() => { setSearchOpen((open) => !open); setAnnotationsOpen(false); setTocOpen(false); setShortcutsOpen(false); }} disabled={!readerReady && !isText} aria-label="Tìm trong tài liệu" title="Tìm trong tài liệu (phím / hoặc Ctrl+F)"><Search size={18} /></button>}
+          {computedToc.length > 0 && <button className={`reader-header-button${tocOpen ? " is-read" : ""}`} type="button" onClick={toggleToc} aria-label="Mục lục" title="Mục lục bên trái (phím M)"><ListTree size={18} /></button>}
+          {item && !isImage && <button className={`reader-header-button${translateMode ? " is-read" : ""}`} type="button" onClick={toggleTranslate} aria-pressed={translateMode} aria-label="Chế độ dịch Anh ⇄ Việt" title="Dịch (phím D): bật rồi bôi đen đoạn văn để dịch"><Languages size={18} /></button>}
           {item && <button className={`reader-header-button${zenMode ? " is-read" : ""}`} type="button" onClick={() => setZenMode((current) => !current)} aria-label="Chế độ tập trung" title="Chế độ tập trung (phím Z)"><Eye size={18} /></button>}
           <button className={`reader-header-button${shortcutsOpen ? " is-read" : ""}`} type="button" onClick={() => { setShortcutsOpen((open) => !open); setAnnotationsOpen(false); setSearchOpen(false); setTocOpen(false); }} aria-label="Phím tắt bàn phím" title="Phím tắt bàn phím (phím ?)"><Keyboard size={18} /></button>
         </div>
@@ -784,7 +894,7 @@ export default function ReaderApp() {
           showNavigation={isBook}
           hasToc={computedToc.length > 0}
           tocOpen={tocOpen}
-          onToggleToc={() => { setTocOpen((open) => !open); setAnnotationsOpen(false); setSearchOpen(false); }}
+          onToggleToc={toggleToc}
           onPrevious={previousPage}
           onNext={nextPage}
           onFont={(delta) => setFontSize((size) => Math.min(30, Math.max(14, size + delta)))}
@@ -812,47 +922,36 @@ export default function ReaderApp() {
           </div>
         </div>
       )}
-      <section className={`reader-viewport${isPdf ? " pdf-viewport" : ""}`}>
+      <div className="reader-body">
+      <ReaderTocSidebar
+        open={tocOpen}
+        items={computedToc}
+        activeId={activeTocId}
+        onSelect={selectTocEntry}
+        onClose={() => setTocOpen(false)}
+      />
+      <section className={`reader-viewport${isPdf ? " pdf-viewport" : ""}${translateMode ? " is-translating" : ""}`}>
         {(loading || (blob && progressReady && (isPdf || isBook) && !readerReady && !error)) && <div className="reader-loading"><LoaderCircle size={26} className="spin" /><span>Đang mở tài liệu từ thư viện…</span></div>}
         {error && <div className="reader-error"><span className="reader-error-icon">!</span><h2>Chưa mở được tài liệu</h2><p>{error}</p><a className="reader-return-link" href={backLink}>Quay về thư viện</a></div>}
-        {blob && progressReady && isPdf && <PdfReader ref={pdfRef} blob={blob} initialProgress={readingProgress} onProgress={handleProgress} onReady={handleReady} />}
+        {blob && progressReady && isPdf && <PdfReader ref={pdfRef} blob={blob} initialProgress={readingProgress} onProgress={handleProgress} onToc={setPdfToc} onReady={handleReady} />}
         {blob && isImage && <div className="image-reader"><img src={objectUrl} alt={item.name} /></div>}
         {blob && isText && <pre ref={textReaderRef} className="text-reader" style={{ fontSize: `${fontSize}px` }} onScroll={handleTextScroll}>{textContent}</pre>}
         {blob && progressReady && isEpub && (
           <Suspense fallback={null}>
-            <EpubReader ref={epubRef} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} onLocation={handleLocation} onProgress={handleProgress} onToc={setTocItems} onReady={handleReady} />
+            <EpubReader ref={epubRef} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} onLocation={handleLocation} onProgress={handleProgress} onToc={setTocItems} onSection={setCurrentHref} onSelectText={handleSelectedText} onReady={handleReady} />
           </Suspense>
         )}
-        {blob && progressReady && isAzw3 && <Azw3Reader ref={azw3Ref} key={item.id} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} chapterIndex={chapterIndex} onChapter={handleChapter} onNext={nextPage} onPrevious={previousPage} onProgress={handleProgress} onReady={handleReady} />}
+        {blob && progressReady && isAzw3 && <Azw3Reader ref={azw3Ref} key={item.id} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} chapterIndex={chapterIndex} onChapter={handleChapter} onNext={nextPage} onPrevious={previousPage} onProgress={handleProgress} onSelectText={handleSelectedText} onReady={handleReady} />}
       </section>
-      {tocOpen && computedToc.length > 0 && (
-        <aside className="reader-toc-panel" aria-label="Mục lục sách">
-          <header className="reader-annotations-header">
-            <div><strong>Mục lục</strong><span>{computedToc.length} mục</span></div>
-            <button className="reader-annotation-icon" type="button" onClick={() => setTocOpen(false)} aria-label="Đóng mục lục"><X size={18} /></button>
-          </header>
-          <div className="reader-toc-list">
-            {computedToc.map((entry, idx) => {
-              const isActive = isAzw3 && entry.chapterIndex === chapterIndex;
-              return (
-                <button
-                  key={`${entry.id}-${idx}`}
-                  type="button"
-                  className={`reader-toc-item${isActive ? " is-active" : ""}`}
-                  style={{ paddingLeft: `${12 + Math.min(entry.depth || 0, 4) * 14}px` }}
-                  onClick={() => {
-                    if (isEpub) epubRef.current?.goTo({ href: entry.href });
-                    else if (isAzw3) azw3Ref.current?.goTo({ chapterIndex: entry.chapterIndex });
-                    setTocOpen(false);
-                  }}
-                >
-                  {entry.label}
-                </button>
-              );
-            })}
-          </div>
-        </aside>
+      </div>
+      {translateMode && !zenMode && (
+        <div className="reader-translate-hint" role="status">
+          <Languages size={14} />
+          <span>{isPdf ? "Bôi đen chữ trên trang PDF để dịch" : "Bôi đen đoạn văn để dịch"} · Anh ⇄ Việt</span>
+          <button type="button" onClick={() => setTranslateMode(false)}>Tắt</button>
+        </div>
       )}
+      {selection && <TranslatePopover key={selection.text} selection={selection} onClose={() => setSelection(null)} />}
       <ReaderAnnotations
         open={annotationsOpen}
         annotations={annotations}
@@ -875,10 +974,11 @@ export default function ReaderApp() {
             <div><dt><kbd>Home</kbd> / <kbd>End</kbd></dt><dd>Đầu / cuối tài liệu (PDF, AZW3)</dd></div>
             <div><dt><kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd></dt><dd>Tăng / giảm / mặc định cỡ chữ hoặc thu phóng</dd></div>
             <div><dt><kbd>T</kbd></dt><dd>Đổi giao diện Sáng · Sepia · Tối</dd></div>
-            <div><dt><kbd>M</kbd></dt><dd>Mở / đóng Mục lục</dd></div>
+            <div><dt><kbd>M</kbd></dt><dd>Hiện / ẩn Mục lục bên trái</dd></div>
             <div><dt><kbd>B</kbd></dt><dd>Thêm dấu trang tại vị trí hiện tại</dd></div>
             <div><dt><kbd>N</kbd></dt><dd>Mở / đóng Dấu trang & ghi chú</dd></div>
             <div><dt><kbd>/</kbd> hoặc <kbd>Ctrl</kbd>+<kbd>F</kbd></dt><dd>Tìm trong tài liệu</dd></div>
+            <div><dt><kbd>D</kbd></dt><dd>Bật / tắt dịch (bôi đen để dịch Anh ⇄ Việt)</dd></div>
             <div><dt><kbd>Z</kbd></dt><dd>Chế độ tập trung (ẩn thanh công cụ)</dd></div>
             <div><dt><kbd>F</kbd></dt><dd>Bật / tắt toàn màn hình</dd></div>
             <div><dt><kbd>?</kbd> / <kbd>Esc</kbd></dt><dd>Mở trợ giúp phím tắt / Đóng bảng</dd></div>

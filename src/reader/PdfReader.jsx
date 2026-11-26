@@ -5,8 +5,50 @@ function clampPage(page, totalPages) {
   return Math.min(totalPages, Math.max(1, Number.isInteger(page) ? page : 1));
 }
 
+async function buildPdfToc(document) {
+  const entries = [];
+  try {
+    const outline = await document.getOutline();
+    const walk = async (items, depth) => {
+      for (const item of items || []) {
+        if (entries.length >= 1500) return;
+        let pageNumber = null;
+        try {
+          let dest = item.dest;
+          if (typeof dest === "string") dest = await document.getDestination(dest);
+          if (Array.isArray(dest) && dest[0] !== undefined && dest[0] !== null) {
+            pageNumber = typeof dest[0] === "number" ? dest[0] + 1 : (await document.getPageIndex(dest[0])) + 1;
+          }
+        } catch {
+          pageNumber = null;
+        }
+        if (pageNumber) {
+          entries.push({
+            id: `pdf-${entries.length}`,
+            label: (item.title || "").trim() || `Trang ${pageNumber}`,
+            pageNumber,
+            depth,
+          });
+        }
+        await walk(item.items, depth + 1);
+      }
+    };
+    await walk(outline, 0);
+  } catch (error) {
+    console.warn("Không đọc được mục lục PDF, dùng danh sách trang.", error);
+  }
+  if (entries.length) return entries;
+  return Array.from({ length: Math.min(document.numPages, 2000) }, (_, index) => ({
+    id: `pdf-${index}`,
+    label: `Trang ${index + 1}`,
+    pageNumber: index + 1,
+    depth: 0,
+  }));
+}
+
 function PdfPage({
   pdf,
+  pdfLib,
   pageNumber,
   containerWidth,
   zoom,
@@ -16,6 +58,7 @@ function PdfPage({
   onError,
 }) {
   const canvasRef = useRef(null);
+  const textLayerRef = useRef(null);
   const [pageRatio, setPageRatio] = useState(estimatedRatio);
   const [rendering, setRendering] = useState(false);
 
@@ -27,6 +70,7 @@ function PdfPage({
     if (!isNearViewport || !containerWidth || !canvasRef.current) return undefined;
     let active = true;
     let renderTask;
+    let textLayer;
 
     async function renderPage() {
       setRendering(true);
@@ -54,6 +98,17 @@ function PdfPage({
         if (!active) return;
         setRendering(false);
         onRendered(pageNumber);
+        const layer = textLayerRef.current;
+        if (layer && pdfLib?.TextLayer) {
+          layer.replaceChildren();
+          layer.style.setProperty("--total-scale-factor", String(viewport.scale));
+          textLayer = new pdfLib.TextLayer({
+            textContentSource: page.streamTextContent(),
+            container: layer,
+            viewport,
+          });
+          await textLayer.render().catch(() => {});
+        }
       } catch (cause) {
         if (!active || cause.name === "RenderingCancelledException") return;
         setRendering(false);
@@ -65,13 +120,14 @@ function PdfPage({
     return () => {
       active = false;
       renderTask?.cancel();
+      textLayer?.cancel();
       const canvas = canvasRef.current;
       if (canvas) {
         canvas.width = 0;
         canvas.height = 0;
       }
     };
-  }, [containerWidth, isNearViewport, onError, onRendered, pageNumber, pdf, zoom]);
+  }, [containerWidth, isNearViewport, onError, onRendered, pageNumber, pdf, pdfLib, zoom]);
 
   const width = Math.max(200, containerWidth - 32) * zoom;
   return (
@@ -84,14 +140,18 @@ function PdfPage({
       {isNearViewport
         ? <canvas ref={canvasRef} className={`pdf-page-canvas${rendering ? " is-rendering" : ""}`} />
         : <div className="pdf-page-placeholder" aria-hidden="true" />}
+      {isNearViewport && <div ref={textLayerRef} className="textLayer pdf-text-layer" />}
       <span className="pdf-page-label">Trang {pageNumber}</span>
       {rendering && <span className="pdf-page-loading">Đang tải trang…</span>}
     </article>
   );
 }
 
-export const PdfReader = forwardRef(function PdfReader({ blob, initialProgress, onProgress, onReady }, ref) {
+export const PdfReader = forwardRef(function PdfReader({ blob, initialProgress, onProgress, onToc, onReady }, ref) {
   const stageRef = useRef(null);
+  const onTocRef = useRef(onToc);
+  onTocRef.current = onToc;
+  const [pdfLib, setPdfLib] = useState(null);
   const renderedRef = useRef(false);
   const initialPositionRestoredRef = useRef(false);
   const initialPageNumberRef = useRef(Number.isInteger(initialProgress?.pageNumber) ? initialProgress.pageNumber : 1);
@@ -194,9 +254,13 @@ export const PdfReader = forwardRef(function PdfReader({ blob, initialProgress, 
         if (!active) return;
         const firstViewport = firstPage.getViewport({ scale: 1 });
         setPageRatio(firstViewport.height / firstViewport.width);
+        setPdfLib(pdfjsLib);
         setPdf(document);
         setTotalPages(document.numPages);
         setPageNumber(clampPage(initialPageNumberRef.current, document.numPages));
+        buildPdfToc(document).then((toc) => {
+          if (active) onTocRef.current?.(toc);
+        });
       } catch (cause) {
         if (!active) return;
         console.error("Không thể tải PDF.", cause);
@@ -398,6 +462,7 @@ export const PdfReader = forwardRef(function PdfReader({ blob, initialProgress, 
               <PdfPage
                 key={page}
                 pdf={pdf}
+                pdfLib={pdfLib}
                 pageNumber={page}
                 containerWidth={containerWidth}
                 zoom={zoom}

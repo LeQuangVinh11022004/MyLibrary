@@ -891,3 +891,351 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
   background: #1d241e;
   color: #e6e9df;
 }
+
+/* Left docked Table of Contents sidebar */
+.reader-body {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+.reader-app.is-zen .reader-toc-sidebar,
+.reader-app.is-zen .reader-toc-scrim {
+  display: none;
+}
+.reader-toc-scrim {
+  display: none;
+}
+.reader-toc-sidebar {
+  width: clamp(240px, 22vw, 310px);
+  flex: 0 0 auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid #e4dfd4;
+  background: #fbfaf6;
+  color: #2f3b31;
+  z-index: 4;
+}
+.reader-theme-sepia .reader-toc-sidebar {
+  border-right-color: #e2d6c3;
+  background: #f2eadc;
+  color: #45392d;
+}
+.reader-theme-dark .reader-toc-sidebar {
+  border-right-color: #343c34;
+  background: #202721;
+  color: #e6e9df;
+}
+.reader-toc-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 12px 10px 14px;
+  border-bottom: 1px solid #ece8de;
+}
+.reader-theme-sepia .reader-toc-sidebar-head { border-bottom-color: #e5dac6; }
+.reader-theme-dark .reader-toc-sidebar-head { border-bottom-color: #343c34; }
+.reader-toc-sidebar-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+}
+.reader-toc-sidebar-head em {
+  font-style: normal;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: #e9f0e6;
+  color: var(--green-dark);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.reader-theme-dark .reader-toc-sidebar-head em {
+  background: #2e3b2e;
+  color: #cfe0ca;
+}
+.reader-toc-filter {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px 10px 4px;
+  padding: 0 9px;
+  height: 34px;
+  border: 1px solid #e1ddd2;
+  border-radius: 9px;
+  background: #fffdf8;
+  color: #788273;
+}
+.reader-toc-filter:focus-within {
+  border-color: #9eb79c;
+  box-shadow: 0 0 0 3px #e6efe2;
+}
+.reader-toc-filter input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+}
+.reader-theme-dark .reader-toc-filter {
+  border-color: #3f4a3e;
+  background: #1a201b;
+  color: #cfd8ca;
+}
+.reader-toc-sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 8px 16px;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+}
+.reader-toc-item {
+  justify-content: space-between;
+  gap: 8px;
+}
+.reader-toc-item > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reader-toc-item > small {
+  flex: 0 0 auto;
+  color: #859082;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+.reader-theme-dark .reader-toc-item > small { color: #9aa596; }
+.reader-toc-empty {
+  padding: 12px 10px;
+  margin: 0;
+  color: #858b80;
+  font-size: 11.5px;
+}
+
+@media (max-width: 899px) {
+  .reader-toc-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    border: 0;
+    padding: 0;
+    background: rgba(20, 26, 20, .34);
+    cursor: pointer;
+  }
+  .reader-toc-sidebar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 5;
+    width: min(300px, 84vw);
+    box-shadow: 12px 0 36px rgba(20, 26, 20, .2);
+  }
+}
+
+/* PDF selectable text layer for in-place translation */
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  transform-origin: 0 0;
+  z-index: 1;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor, 1) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+.pdf-text-layer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.pdf-text-layer .markedContent { display: contents; }
+.pdf-text-layer ::selection {
+  background: rgba(71, 116, 91, .32);
+  color: transparent;
+}
+.reader-viewport.is-translating .text-reader,
+.reader-viewport.is-translating .pdf-text-layer {
+  cursor: text;
+}
+
+/* Inline translation mode hint & floating popover */
+.reader-translate-hint {
+  position: fixed;
+  z-index: 7;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 13px;
+  border: 1px solid #c9dac4;
+  border-radius: 999px;
+  background: rgba(244, 249, 242, .96);
+  color: #2f553c;
+  box-shadow: 0 10px 28px rgba(34, 46, 35, .14);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: calc(100vw - 24px);
+}
+.reader-translate-hint > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reader-translate-hint button {
+  padding: 3px 9px;
+  border: 1px solid #c2d4bd;
+  border-radius: 99px;
+  background: #fff;
+  color: #315640;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.reader-translate-hint button:hover {
+  background: #e9f1e6;
+}
+.reader-theme-dark .reader-translate-hint {
+  border-color: #4f634c;
+  background: rgba(34, 44, 35, .96);
+  color: #deebda;
+}
+.reader-theme-dark .reader-translate-hint button {
+  border-color: #556952;
+  background: #2b382c;
+  color: #e4efdf;
+}
+
+.translate-popover {
+  position: fixed;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid #d5dfd1;
+  border-radius: 15px;
+  background: #fffdf8;
+  color: #29362c;
+  box-shadow: 0 18px 46px rgba(24, 34, 25, .24);
+  animation: reader-ui-in .15s ease-out both;
+}
+.reader-theme-sepia .translate-popover {
+  border-color: #dccdb5;
+  background: #f9f2e4;
+  color: #43372b;
+}
+.reader-theme-dark .translate-popover {
+  border-color: #445143;
+  background: #232b24;
+  color: #e8ece2;
+}
+.translate-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid #ece8de;
+}
+.reader-theme-dark .translate-popover-head { border-bottom-color: #364036; }
+.translate-popover-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--green-dark);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.reader-theme-dark .translate-popover-title { color: #a7c99f; }
+.translate-popover-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.translate-popover-actions button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #5d6a5c;
+  cursor: pointer;
+}
+.translate-popover-actions button:hover:not(:disabled) {
+  background: #eef3ea;
+  color: var(--green-dark);
+}
+.reader-theme-dark .translate-popover-actions button { color: #b8c2b3; }
+.reader-theme-dark .translate-popover-actions button:hover:not(:disabled) {
+  background: #324032;
+  color: #e6f0e2;
+}
+.translate-popover-source {
+  margin: 0;
+  padding: 6px 9px;
+  border-left: 3px solid #9db797;
+  border-radius: 4px;
+  background: #f6f4ec;
+  color: #5e6a5d;
+  font-size: 11.5px;
+  line-height: 1.45;
+  max-height: 76px;
+  overflow-y: auto;
+}
+.reader-theme-dark .translate-popover-source {
+  background: #1b221c;
+  color: #b4bdaf;
+}
+.translate-popover-result {
+  font-size: 13.5px;
+  line-height: 1.55;
+  max-height: 160px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.translate-popover-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #6d786b;
+  font-size: 12px;
+}
+.translate-popover-error {
+  color: #a64a3e;
+  font-size: 12px;
+}
+.reader-theme-dark .translate-popover-error { color: #e28d82; }
+.translate-popover-note {
+  margin: 0;
+  color: #858d81;
+  font-size: 10.5px;
+}

@@ -44,6 +44,7 @@ function Azw3Chapter({
   onError,
   onNext,
   onPrevious,
+  onSelectText,
 }) {
   const iframeRef = useRef(null);
   const [chapterHtml, setChapterHtml] = useState(null);
@@ -115,6 +116,23 @@ function Azw3Chapter({
       else onPrevious();
     }
 
+    function onDocumentSelection() {
+      window.setTimeout(() => {
+        const selected = iframe.contentDocument?.getSelection();
+        if (!selected || selected.isCollapsed || !selected.rangeCount) return;
+        const rect = selected.getRangeAt(0).getBoundingClientRect();
+        const frameRect = iframe.getBoundingClientRect();
+        onSelectText?.(selected.toString(), {
+          top: rect.top + frameRect.top,
+          bottom: rect.bottom + frameRect.top,
+          left: rect.left + frameRect.left,
+          right: rect.right + frameRect.left,
+          width: rect.width,
+          height: rect.height,
+        });
+      }, 10);
+    }
+
     function onDocumentKeyDown(event) {
       window.dispatchEvent(new KeyboardEvent("keydown", {
         key: event.key,
@@ -134,6 +152,8 @@ function Azw3Chapter({
         activeDocument.removeEventListener("touchstart", onDocumentTouchStart);
         activeDocument.removeEventListener("touchend", onDocumentTouchEnd);
         activeDocument.removeEventListener("keydown", onDocumentKeyDown);
+        activeDocument.removeEventListener("mouseup", onDocumentSelection);
+        activeDocument.removeEventListener("touchend", onDocumentSelection);
         resizeObserver?.disconnect();
       }
       activeDocument = contentDocument;
@@ -142,6 +162,8 @@ function Azw3Chapter({
       activeDocument.addEventListener("touchstart", onDocumentTouchStart, { passive: true });
       activeDocument.addEventListener("touchend", onDocumentTouchEnd, { passive: true });
       activeDocument.addEventListener("keydown", onDocumentKeyDown);
+      activeDocument.addEventListener("mouseup", onDocumentSelection);
+      activeDocument.addEventListener("touchend", onDocumentSelection, { passive: true });
       resizeObserver = new ResizeObserver(measureContent);
       resizeObserver.observe(contentDocument.documentElement);
       resizeObserver.observe(contentDocument.body);
@@ -157,9 +179,11 @@ function Azw3Chapter({
       activeDocument?.removeEventListener("touchstart", onDocumentTouchStart);
       activeDocument?.removeEventListener("touchend", onDocumentTouchEnd);
       activeDocument?.removeEventListener("keydown", onDocumentKeyDown);
+      activeDocument?.removeEventListener("mouseup", onDocumentSelection);
+      activeDocument?.removeEventListener("touchend", onDocumentSelection);
       resizeObserver?.disconnect();
     };
-  }, [chapterHtml, chapterIndex, fontSize, onMeasure, onNext, onPrevious, onReady, theme]);
+  }, [chapterHtml, chapterIndex, fontSize, onMeasure, onNext, onPrevious, onReady, onSelectText, theme]);
 
   if (!isRendered) {
     return (
@@ -195,6 +219,7 @@ export const Azw3Reader = forwardRef(function Azw3Reader({
   onNext,
   onPrevious,
   onProgress,
+  onSelectText,
   onReady,
 }, ref) {
   const stageRef = useRef(null);
@@ -406,6 +431,7 @@ export const Azw3Reader = forwardRef(function Azw3Reader({
               onError={handleChapterError}
               onNext={onNext}
               onPrevious={onPrevious}
+              onSelectText={onSelectText}
             />
           </section>
         ))}
