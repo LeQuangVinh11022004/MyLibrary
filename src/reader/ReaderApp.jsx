@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, BookmarkPlus, Check, CloudDownload, Download, Eye, EyeOff, Fingerprint, Keyboard, Languages, ListTree, LoaderCircle, NotebookPen, Search, X } from "lucide-react";
+import { ArrowLeft, BookmarkPlus, Check, ChevronLeft, ChevronRight, CloudDownload, Download, Eye, EyeOff, Fingerprint, Keyboard, Languages, ListTree, LoaderCircle, Minus, MoreHorizontal, NotebookPen, Plus, Search, Type, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { formatFileSize } from "../lib/library-utils";
 import { anchorOrVerifyFileHash, isHashRegistryConfigured } from "../lib/blockchain";
@@ -8,7 +8,6 @@ import { PdfReader } from "./PdfReader";
 import { ReaderAnnotations } from "./ReaderAnnotations";
 import { ReaderSearch } from "./ReaderSearch";
 import { ReaderTocSidebar } from "./ReaderTocSidebar";
-import { ReaderToolbar } from "./ReaderToolbar";
 import { TranslatePopover } from "./TranslatePopover";
 import { cacheDocument, getCachedDocument, removeCachedDocument } from "../lib/offline-cache";
 import {
@@ -75,6 +74,8 @@ export default function ReaderApp() {
   const [selection, setSelection] = useState(null);
   const translateModeRef = useRef(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [tocItems, setTocItems] = useState([]);
   const [zenMode, setZenMode] = useState(false);
   const [offlineAvailable, setOfflineAvailable] = useState(false);
@@ -552,11 +553,12 @@ export default function ReaderApp() {
         case "Escape":
           if (selection) {
             setSelection(null);
-          } else if (annotationsOpen || searchOpen || shortcutsOpen) {
+          } else if (annotationsOpen || searchOpen || shortcutsOpen || appearanceOpen || moreOpen) {
             setAnnotationsOpen(false);
             setSearchOpen(false);
-            setTocOpen(false);
             setShortcutsOpen(false);
+            setAppearanceOpen(false);
+            setMoreOpen(false);
           } else if (zenMode) {
             setZenMode(false);
           }
@@ -695,6 +697,8 @@ export default function ReaderApp() {
     toggleTranslate,
     isImage,
     selection,
+    appearanceOpen,
+    moreOpen,
     zenMode,
   ]);
 
@@ -847,32 +851,131 @@ export default function ReaderApp() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  const closePopovers = useCallback(() => {
+    setAnnotationsOpen(false);
+    setSearchOpen(false);
+    setShortcutsOpen(false);
+    setAppearanceOpen(false);
+    setMoreOpen(false);
+  }, []);
+
+  const headerSubtitle = useMemo(() => {
+    if (!item) return "Không gian đọc riêng tư";
+    const parts = [extension.toUpperCase()];
+    if (progressDetails?.percent !== null && progressDetails?.percent !== undefined) {
+      parts.push(`${progressDetails.percent}%`);
+    } else if (item.size_bytes) {
+      parts.push(formatFileSize(Number(item.size_bytes)));
+    }
+    if (offlineCopyActive) parts.push("Offline");
+    return parts.join(" · ");
+  }, [extension, item, offlineCopyActive, progressDetails]);
+
   const backLink = import.meta.env.BASE_URL;
   return (
     <main className={`reader-app reader-theme-${theme}${zenMode ? " is-zen" : ""}`}>
       <header className="reader-header">
-        <a className="reader-back" href={backLink}><span><ArrowLeft size={19} /></span> Thư viện</a>
-        <div className="reader-book-heading">
-          <strong>{item?.name || (error ? "Không thể mở sách" : "Đang tải sách…")}</strong>
-          <span>{item ? `${extension.toUpperCase()} · ${formatFileSize(Number(item.size_bytes))}` : "Không gian đọc riêng tư"}</span>
+        <div className="reader-header-left">
+          <a className="reader-pill-btn" href={backLink} aria-label="Quay về thư viện" title="Quay về thư viện">
+            <ArrowLeft size={17} />
+            <span className="hide-sm">Thư viện</span>
+          </a>
+          {computedToc.length > 0 && (
+            <button
+              className={`reader-pill-btn${tocOpen ? " is-active" : ""}`}
+              type="button"
+              onClick={toggleToc}
+              aria-pressed={tocOpen}
+              aria-label="Mục lục"
+              title="Mục lục (phím M)"
+            >
+              <ListTree size={17} />
+              <span className="hide-md">Mục lục</span>
+            </button>
+          )}
         </div>
+
+        <div className="reader-book-heading">
+          <strong title={item?.name}>{item?.name || (error ? "Không thể mở sách" : "Đang tải sách…")}</strong>
+          <span>{headerSubtitle}</span>
+        </div>
+
         <div className="reader-header-actions">
-          <button className="reader-header-button" type="button" onClick={downloadBook} disabled={!blob} aria-label="Tải sách xuống" title="Tải sách xuống"><Download size={18} /></button>
-          <button className={`reader-header-button${item?.status === "read" ? " is-read" : ""}`} type="button" onClick={toggleRead} disabled={!item} aria-label={item?.status === "read" ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"} title={item?.status === "read" ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"}><Check size={18} /></button>
-          {(isPdf || isBook) && <button className="reader-header-button" type="button" onClick={() => createAnnotation("bookmark").catch((cause) => notify(cause.message))} disabled={!readerReady} aria-label="Thêm dấu trang" title="Thêm dấu trang"><BookmarkPlus size={18} /></button>}
-          <button className={`reader-header-button${annotationsOpen ? " is-read" : ""}`} type="button" onClick={() => { setAnnotationsOpen((open) => !open); setSearchOpen(false); setTocOpen(false); setShortcutsOpen(false); }} disabled={!item} aria-label="Mở dấu trang và ghi chú" title="Dấu trang và ghi chú (phím N)">
-            <NotebookPen size={18} />
+          {item && !isImage && (
+            <button
+              className={`reader-pill-btn${translateMode ? " is-active" : ""}`}
+              type="button"
+              onClick={toggleTranslate}
+              aria-pressed={translateMode}
+              aria-label="Chế độ dịch Anh ⇄ Việt"
+              title="Bật dịch rồi bôi đen chữ để dịch (phím D)"
+            >
+              <Languages size={16} />
+              <span className="hide-sm">Dịch</span>
+            </button>
+          )}
+          {(isPdf || isBook || isText) && (
+            <button
+              className={`reader-icon-btn${searchOpen ? " is-active" : ""}`}
+              type="button"
+              onClick={() => { const next = !searchOpen; closePopovers(); setSearchOpen(next); }}
+              disabled={!readerReady && !isText}
+              aria-label="Tìm trong tài liệu"
+              title="Tìm trong tài liệu (Ctrl+F)"
+            >
+              <Search size={17} />
+            </button>
+          )}
+          <button
+            className={`reader-icon-btn${annotationsOpen ? " is-active" : ""}`}
+            type="button"
+            onClick={() => { const next = !annotationsOpen; closePopovers(); setAnnotationsOpen(next); }}
+            disabled={!item}
+            aria-label="Dấu trang và ghi chú"
+            title="Dấu trang & ghi chú (phím N)"
+          >
+            <NotebookPen size={17} />
             {annotations.length > 0 && <em className="reader-badge">{annotations.length}</em>}
           </button>
-          <button className={`reader-header-button${offlineAvailable ? " is-read" : ""}`} type="button" onClick={toggleOfflineCopy} disabled={!blob || offlineBusy} aria-label={offlineAvailable ? "Xóa bản offline" : "Lưu để đọc offline"} title={offlineAvailable ? "Xóa bản offline" : "Lưu để đọc offline"}><CloudDownload size={18} /></button>
-          <button className="reader-header-button" type="button" onClick={anchorCurrentFileHash} disabled={!blob || blockchainBusy || !isHashRegistryConfigured} aria-label={isHashRegistryConfigured ? "Neo hash file lên Sepolia" : "Neo hash (chưa cấu hình smart contract)"} title={isHashRegistryConfigured ? "Neo hash file lên Sepolia (công khai)" : "Cần triển khai FileHashRegistry và cấu hình địa chỉ"}><Fingerprint size={18} /></button>
-          {(isPdf || isBook || isText) && <button className={`reader-header-button${searchOpen ? " is-read" : ""}`} type="button" onClick={() => { setSearchOpen((open) => !open); setAnnotationsOpen(false); setTocOpen(false); setShortcutsOpen(false); }} disabled={!readerReady && !isText} aria-label="Tìm trong tài liệu" title="Tìm trong tài liệu (phím / hoặc Ctrl+F)"><Search size={18} /></button>}
-          {computedToc.length > 0 && <button className={`reader-header-button${tocOpen ? " is-read" : ""}`} type="button" onClick={toggleToc} aria-label="Mục lục" title="Mục lục bên trái (phím M)"><ListTree size={18} /></button>}
-          {item && !isImage && <button className={`reader-header-button${translateMode ? " is-read" : ""}`} type="button" onClick={toggleTranslate} aria-pressed={translateMode} aria-label="Chế độ dịch Anh ⇄ Việt" title="Dịch (phím D): bật rồi bôi đen đoạn văn để dịch"><Languages size={18} /></button>}
-          {item && <button className={`reader-header-button${zenMode ? " is-read" : ""}`} type="button" onClick={() => setZenMode((current) => !current)} aria-label="Chế độ tập trung" title="Chế độ tập trung (phím Z)"><Eye size={18} /></button>}
-          <button className={`reader-header-button${shortcutsOpen ? " is-read" : ""}`} type="button" onClick={() => { setShortcutsOpen((open) => !open); setAnnotationsOpen(false); setSearchOpen(false); setTocOpen(false); }} aria-label="Phím tắt bàn phím" title="Phím tắt bàn phím (phím ?)"><Keyboard size={18} /></button>
+          {(isBook || isText) && item && (
+            <button
+              className={`reader-icon-btn${appearanceOpen ? " is-active" : ""}`}
+              type="button"
+              onClick={() => { const next = !appearanceOpen; closePopovers(); setAppearanceOpen(next); }}
+              aria-label="Cỡ chữ và màu nền"
+              title="Cỡ chữ & màu nền (phím T)"
+            >
+              <Type size={17} />
+            </button>
+          )}
+          <button
+            className={`reader-icon-btn${moreOpen ? " is-active" : ""}`}
+            type="button"
+            onClick={() => { const next = !moreOpen; closePopovers(); setMoreOpen(next); }}
+            aria-label="Thêm tùy chọn"
+            title="Thêm tùy chọn"
+          >
+            <MoreHorizontal size={18} />
+          </button>
         </div>
+
+        {item && progressDetails && (
+          <div
+            className={`reader-progress-line${progressDetails.percent === null ? " is-indeterminate" : ""}`}
+            role="progressbar"
+            aria-label="Tiến độ đọc"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            {...(progressDetails.percent === null ? {} : { "aria-valuenow": progressDetails.percent })}
+            aria-valuetext={progressDetails.percent === null
+              ? progressDetails.detail
+              : `${progressDetails.detail}, ${progressDetails.percent}%`}
+          >
+            <span style={{ width: `${progressDetails.percent ?? 0}%` }} />
+          </div>
+        )}
       </header>
+
       {zenMode && (
         <button
           type="button"
@@ -886,64 +989,136 @@ export default function ReaderApp() {
         </button>
       )}
       {readerWarning && <div className="reader-feature-warning" role="status">{readerWarning}</div>}
-      {(isBook || isText) && item && (
-        <ReaderToolbar
-          location={isAzw3 ? `Chương ${chapterIndex + 1} / ${chapterCount}` : isText ? `Văn bản · ${progressDetails?.percent ?? 0}%` : location}
-          theme={theme}
-          fontSize={fontSize}
-          showNavigation={isBook}
-          hasToc={computedToc.length > 0}
-          tocOpen={tocOpen}
-          onToggleToc={toggleToc}
-          onPrevious={previousPage}
-          onNext={nextPage}
-          onFont={(delta) => setFontSize((size) => Math.min(30, Math.max(14, size + delta)))}
-          onTheme={changeTheme}
-        />
-      )}
-      {item && progressDetails && (
-        <div className="reader-progress-strip" aria-label="Tiến độ đọc">
-          <div className="reader-progress-copy">
-            <span>{progressDetails.detail}</span>
-            <strong>{progressDetails.percent === null ? "…" : `${progressDetails.percent}%`}</strong>
-          </div>
-          <div
-            className={`reader-progress-track${progressDetails.percent === null ? " is-indeterminate" : ""}`}
-            role="progressbar"
-            aria-label="Tiến độ đọc"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            {...(progressDetails.percent === null ? {} : { "aria-valuenow": progressDetails.percent })}
-            aria-valuetext={progressDetails.percent === null
-              ? progressDetails.detail
-              : `${progressDetails.detail}, ${progressDetails.percent}%`}
-          >
-            <span style={{ width: `${progressDetails.percent ?? 0}%` }} />
-          </div>
-        </div>
-      )}
+
       <div className="reader-body">
-      <ReaderTocSidebar
-        open={tocOpen}
-        items={computedToc}
-        activeId={activeTocId}
-        onSelect={selectTocEntry}
-        onClose={() => setTocOpen(false)}
-      />
-      <section className={`reader-viewport${isPdf ? " pdf-viewport" : ""}${translateMode ? " is-translating" : ""}`}>
-        {(loading || (blob && progressReady && (isPdf || isBook) && !readerReady && !error)) && <div className="reader-loading"><LoaderCircle size={26} className="spin" /><span>Đang mở tài liệu từ thư viện…</span></div>}
-        {error && <div className="reader-error"><span className="reader-error-icon">!</span><h2>Chưa mở được tài liệu</h2><p>{error}</p><a className="reader-return-link" href={backLink}>Quay về thư viện</a></div>}
-        {blob && progressReady && isPdf && <PdfReader ref={pdfRef} blob={blob} initialProgress={readingProgress} onProgress={handleProgress} onToc={setPdfToc} onReady={handleReady} />}
-        {blob && isImage && <div className="image-reader"><img src={objectUrl} alt={item.name} /></div>}
-        {blob && isText && <pre ref={textReaderRef} className="text-reader" style={{ fontSize: `${fontSize}px` }} onScroll={handleTextScroll}>{textContent}</pre>}
-        {blob && progressReady && isEpub && (
-          <Suspense fallback={null}>
-            <EpubReader ref={epubRef} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} onLocation={handleLocation} onProgress={handleProgress} onToc={setTocItems} onSection={setCurrentHref} onSelectText={handleSelectedText} onReady={handleReady} />
-          </Suspense>
-        )}
-        {blob && progressReady && isAzw3 && <Azw3Reader ref={azw3Ref} key={item.id} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} chapterIndex={chapterIndex} onChapter={handleChapter} onNext={nextPage} onPrevious={previousPage} onProgress={handleProgress} onSelectText={handleSelectedText} onReady={handleReady} />}
-      </section>
+        <ReaderTocSidebar
+          open={tocOpen}
+          items={computedToc}
+          activeId={activeTocId}
+          onSelect={selectTocEntry}
+          onClose={() => setTocOpen(false)}
+        />
+        <section className={`reader-viewport${isPdf ? " pdf-viewport" : ""}${translateMode ? " is-translating" : ""}`}>
+          {(loading || (blob && progressReady && (isPdf || isBook) && !readerReady && !error)) && (
+            <div className="reader-loading">
+              <LoaderCircle size={24} className="spin" />
+              <span>Đang mở tài liệu…</span>
+            </div>
+          )}
+          {error && (
+            <div className="reader-error">
+              <span className="reader-error-icon">!</span>
+              <h2>Chưa mở được tài liệu</h2>
+              <p>{error}</p>
+              <a className="reader-return-link" href={backLink}>Quay về thư viện</a>
+            </div>
+          )}
+          {blob && progressReady && isPdf && <PdfReader ref={pdfRef} blob={blob} initialProgress={readingProgress} onProgress={handleProgress} onToc={setPdfToc} onReady={handleReady} />}
+          {blob && isImage && <div className="image-reader"><img src={objectUrl} alt={item.name} /></div>}
+          {blob && isText && <pre ref={textReaderRef} className="text-reader" style={{ fontSize: `${fontSize}px` }} onScroll={handleTextScroll}>{textContent}</pre>}
+          {blob && progressReady && isEpub && (
+            <Suspense fallback={null}>
+              <EpubReader ref={epubRef} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} onLocation={handleLocation} onProgress={handleProgress} onToc={setTocItems} onSection={setCurrentHref} onSelectText={handleSelectedText} onReady={handleReady} />
+            </Suspense>
+          )}
+          {blob && progressReady && isAzw3 && <Azw3Reader ref={azw3Ref} key={item.id} blob={blob} initialProgress={readingProgress} theme={theme} fontSize={fontSize} chapterIndex={chapterIndex} onChapter={handleChapter} onNext={nextPage} onPrevious={previousPage} onProgress={handleProgress} onSelectText={handleSelectedText} onReady={handleReady} />}
+
+          {isBook && item && !zenMode && (
+            <nav className="reader-bottom-dock" aria-label="Điều hướng trang">
+              <button type="button" className="reader-dock-btn" onClick={previousPage} aria-label="Trang trước" title="Trang trước (←)">
+                <ChevronLeft size={18} />
+                <span>Trước</span>
+              </button>
+              <span className="reader-dock-status" aria-live="polite">
+                {isAzw3 ? `Chương ${chapterIndex + 1} / ${chapterCount}` : location}
+              </span>
+              <button type="button" className="reader-dock-btn" onClick={nextPage} aria-label="Trang tiếp theo" title="Trang tiếp theo (→)">
+                <span>Tiếp</span>
+                <ChevronRight size={18} />
+              </button>
+            </nav>
+          )}
+        </section>
       </div>
+
+      {appearanceOpen && (isBook || isText) && (
+        <aside className="reader-popover reader-appearance-popover" aria-label="Cỡ chữ và màu nền">
+          <div className="reader-popover-section">
+            <span className="reader-popover-label">Màu giấy đọc</span>
+            <div className="reader-theme-grid">
+              {[
+                { id: "light", label: "Sáng", bg: "#fffefa", ink: "#292d28" },
+                { id: "sepia", label: "Giấy ấm", bg: "#f4e9d3", ink: "#45392d" },
+                { id: "dark", label: "Ban đêm", bg: "#1f2520", ink: "#ece8df" },
+              ].map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`reader-theme-option${theme === option.id ? " is-selected" : ""}`}
+                  onClick={() => setTheme(option.id)}
+                >
+                  <span className="reader-theme-swatch" style={{ background: option.bg, color: option.ink }}>Aa</span>
+                  <span>{option.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="reader-popover-section">
+            <div className="reader-popover-row">
+              <span className="reader-popover-label">Cỡ chữ</span>
+              <span className="reader-font-value">{fontSize}px</span>
+            </div>
+            <div className="reader-font-stepper">
+              <button type="button" onClick={() => setFontSize((size) => Math.max(14, size - 2))} disabled={fontSize <= 14} aria-label="Giảm cỡ chữ"><Minus size={15} /> Nhỏ hơn</button>
+              <button type="button" onClick={() => setFontSize(19)} disabled={fontSize === 19} aria-label="Cỡ chữ mặc định">Mặc định</button>
+              <button type="button" onClick={() => setFontSize((size) => Math.min(30, size + 2))} disabled={fontSize >= 30} aria-label="Tăng cỡ chữ"><Plus size={15} /> Lớn hơn</button>
+            </div>
+          </div>
+        </aside>
+      )}
+
+      {moreOpen && (
+        <aside className="reader-popover reader-more-menu" aria-label="Thêm tùy chọn">
+          {(isPdf || isBook) && (
+            <button type="button" className="reader-menu-item" disabled={!readerReady} onClick={() => { setMoreOpen(false); createAnnotation("bookmark").catch((cause) => notify(cause.message)); }}>
+              <BookmarkPlus size={16} />
+              <span>Đánh dấu trang này</span>
+              <kbd>B</kbd>
+            </button>
+          )}
+          <button type="button" className="reader-menu-item" disabled={!item} onClick={() => { setMoreOpen(false); toggleRead(); }}>
+            <Check size={16} />
+            <span>{item?.status === "read" ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"}</span>
+          </button>
+          <button type="button" className="reader-menu-item" disabled={!item} onClick={() => { setMoreOpen(false); setZenMode((current) => !current); }}>
+            <Eye size={16} />
+            <span>Chế độ tập trung</span>
+            <kbd>Z</kbd>
+          </button>
+          <div className="reader-menu-divider" />
+          <button type="button" className="reader-menu-item" disabled={!blob || offlineBusy} onClick={() => { setMoreOpen(false); toggleOfflineCopy(); }}>
+            <CloudDownload size={16} />
+            <span>{offlineAvailable ? "Xóa bản lưu offline" : "Lưu để đọc offline"}</span>
+          </button>
+          <button type="button" className="reader-menu-item" disabled={!blob} onClick={() => { setMoreOpen(false); downloadBook(); }}>
+            <Download size={16} />
+            <span>Tải tệp xuống</span>
+          </button>
+          {isHashRegistryConfigured && (
+            <button type="button" className="reader-menu-item" disabled={!blob || blockchainBusy} onClick={() => { setMoreOpen(false); anchorCurrentFileHash(); }}>
+              <Fingerprint size={16} />
+              <span>Neo hash file (Sepolia)</span>
+            </button>
+          )}
+          <div className="reader-menu-divider" />
+          <button type="button" className="reader-menu-item" onClick={() => { setMoreOpen(false); setShortcutsOpen(true); }}>
+            <Keyboard size={16} />
+            <span>Phím tắt bàn phím</span>
+            <kbd>?</kbd>
+          </button>
+        </aside>
+      )}
+
       {translateMode && !zenMode && (
         <div className="reader-translate-hint" role="status">
           <Languages size={14} />

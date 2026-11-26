@@ -417,37 +417,6 @@ export const PdfReader = forwardRef(function PdfReader({ blob, initialProgress, 
 
   return (
     <div className="pdf-reader">
-      <div className="pdf-reader-controls" aria-label="Điều khiển PDF">
-        <button type="button" className="reader-control pdf-control" onClick={() => changePage(-1)} disabled={pageNumber <= 1} aria-label="Trang PDF trước" title="Trang trước"><ChevronLeft size={18} /></button>
-        <form className="pdf-page-jump" onSubmit={submitPageJump}>
-          <input
-            type="number"
-            min={1}
-            max={totalPages || 1}
-            value={pageInput}
-            onChange={(event) => setPageInput(event.target.value)}
-            onBlur={submitPageJump}
-            aria-label="Số trang hiện tại"
-            disabled={!totalPages}
-          />
-          <span>/ {totalPages || "…"}</span>
-        </form>
-        <button type="button" className="reader-control pdf-control" onClick={() => changePage(1)} disabled={pageNumber >= totalPages} aria-label="Trang PDF tiếp theo" title="Trang tiếp theo"><ChevronRight size={18} /></button>
-        <span className="pdf-control-spacer" />
-        <button type="button" className="reader-control pdf-control" onClick={() => setZoom((current) => Math.max(0.75, current - 0.25))} disabled={zoom <= 0.75} aria-label="Thu nhỏ PDF" title="Thu nhỏ"><Minus size={17} /></button>
-        <button
-          type="button"
-          className="reader-control pdf-zoom-reset"
-          onClick={() => setZoom(1)}
-          disabled={zoom === 1}
-          aria-label="Đặt lại thu phóng 100%"
-          title="Đặt lại 100%"
-        >
-          <span>{Math.round(zoom * 100)}%</span>
-          {zoom !== 1 && <RotateCcw size={12} />}
-        </button>
-        <button type="button" className="reader-control pdf-control" onClick={() => setZoom((current) => Math.min(2, current + 0.25))} disabled={zoom >= 2} aria-label="Phóng to PDF" title="Phóng to"><Plus size={17} /></button>
-      </div>
       <div
         className={`pdf-page-stage${zoom > 1 ? " is-zoomed" : ""}`}
         ref={stageRef}
@@ -474,6 +443,37 @@ export const PdfReader = forwardRef(function PdfReader({ blob, initialProgress, 
             );
           })}
         </div>
+      </div>
+      <div className="reader-bottom-dock pdf-dock" aria-label="Điều khiển PDF">
+        <button type="button" className="reader-dock-btn icon-only" onClick={() => changePage(-1)} disabled={pageNumber <= 1} aria-label="Trang PDF trước" title="Trang trước"><ChevronLeft size={18} /></button>
+        <form className="pdf-page-jump" onSubmit={submitPageJump}>
+          <input
+            type="number"
+            min={1}
+            max={totalPages || 1}
+            value={pageInput}
+            onChange={(event) => setPageInput(event.target.value)}
+            onBlur={submitPageJump}
+            aria-label="Số trang hiện tại"
+            disabled={!totalPages}
+          />
+          <span>/ {totalPages || "…"}</span>
+        </form>
+        <button type="button" className="reader-dock-btn icon-only" onClick={() => changePage(1)} disabled={pageNumber >= totalPages} aria-label="Trang PDF tiếp theo" title="Trang tiếp theo"><ChevronRight size={18} /></button>
+        <span className="reader-dock-sep" aria-hidden="true" />
+        <button type="button" className="reader-dock-btn icon-only" onClick={() => setZoom((current) => Math.max(0.75, current - 0.25))} disabled={zoom <= 0.75} aria-label="Thu nhỏ PDF" title="Thu nhỏ"><Minus size={16} /></button>
+        <button
+          type="button"
+          className="reader-dock-btn pdf-zoom-reset"
+          onClick={() => setZoom(1)}
+          disabled={zoom === 1}
+          aria-label="Đặt lại thu phóng 100%"
+          title="Đặt lại 100%"
+        >
+          <span>{Math.round(zoom * 100)}%</span>
+          {zoom !== 1 && <RotateCcw size={12} />}
+        </button>
+        <button type="button" className="reader-dock-btn icon-only" onClick={() => setZoom((current) => Math.min(2, current + 0.25))} disabled={zoom >= 2} aria-label="Phóng to PDF" title="Phóng to"><Plus size={16} /></button>
       </div>
     </div>
   );

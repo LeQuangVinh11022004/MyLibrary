@@ -1,898 +1,261 @@
-html, body, #reader-root { width: 100%; height: 100%; margin: 0; }
-body { min-width: 320px; font-family: "DM Sans", sans-serif; }
-button, textarea { font: inherit; }
-button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outline-offset: 2px; }
-.reader-app { position: relative; --green: #3f6549; --green-dark: #2e5039; --shadow: 0 10px 30px rgba(39, 47, 38, .06); --reader-page: #fffefa; --reader-ink: #292d28; --reader-bg: #f3f0e8; height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; background: var(--reader-bg); color: #2b342b; font-family: "DM Sans", sans-serif; }
-.reader-theme-sepia { --reader-page: #f2e8d5; --reader-ink: #463a2e; }
-.reader-theme-dark { --reader-page: #20241f; --reader-ink: #eee9df; color: #eee9df; }
-.reader-header { position: relative; z-index: 3; min-height: 65px; display: grid; grid-template-columns: minmax(70px, 1fr) minmax(0, 2fr) minmax(170px, 2fr); align-items: center; gap: 18px; padding: 0 clamp(14px, 3vw, 45px); border-bottom: 1px solid #dfded5; background: #fffefaed; backdrop-filter: blur(14px); }
-.reader-back { display: inline-flex; align-items: center; gap: 9px; width: fit-content; color: #5b695a; text-decoration: none; font-size: 11px; font-weight: 600; }
-.reader-back > span { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #e6e5dc; border-radius: 50%; background: #fff; }
-.reader-back:hover { color: var(--green); }
-.reader-book-heading { min-width: 0; display: grid; justify-items: center; gap: 3px; text-align: center; }
-.reader-book-heading strong { max-width: 100%; overflow: hidden; color: #303930; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.reader-book-heading > span { color: #92978d; font-size: 9px; letter-spacing: .5px; }
-.reader-header-actions { display: flex; justify-content: flex-end; gap: 7px; }
-.reader-header-button { width: 35px; height: 35px; display: grid; place-items: center; border: 1px solid #e6e5dc; border-radius: 50%; background: #fffefa; color: #667260; cursor: pointer; }
-.reader-header-button, .reader-control { transition: transform .16s ease, background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease; }
-.reader-header-button:hover:not(:disabled), .reader-control:hover:not(:disabled) { transform: translateY(-1px); }
-.reader-header-button:active:not(:disabled), .reader-control:active:not(:disabled) { transform: scale(.97); }
-.reader-feature-warning { position: relative; z-index: 2; padding: 9px 16px; border-bottom: 1px solid #e7d8b6; background: #fbf5e8; color: #756343; font-size: 11px; line-height: 1.5; }
-.reader-header-button:hover:not(:disabled), .reader-header-button.is-read { border-color: #cad6c4; background: #edf3e9; color: var(--green); }
-.reader-header-button:disabled { opacity: .45; cursor: not-allowed; }
-.reader-progress-strip { position: relative; z-index: 2; display: grid; gap: 6px; padding: 7px clamp(14px, 3vw, 45px) 8px; border-bottom: 1px solid #e7e4da; background: #fbfaf6; animation: reader-ui-in .22s ease-out both; }
-.reader-progress-copy { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #747d70; font-size: 10px; line-height: 1.2; }
-.reader-progress-copy strong { color: #405940; font-size: 11px; font-variant-numeric: tabular-nums; }
-.reader-progress-track { position: relative; height: 5px; overflow: hidden; border-radius: 99px; background: #e8e9e1; }
-.reader-progress-track > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #6e956a, #3f6549); transition: width .32s cubic-bezier(.2,.8,.2,1); }
-.reader-progress-track.is-indeterminate > span { width: 32% !important; animation: progress-loading 1.15s ease-in-out infinite alternate; }
-.reader-toolbar { position: relative; z-index: 2; min-height: 51px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px clamp(14px, 3vw, 45px); border-bottom: 1px solid #e7e4da; background: #fbfaf6f0; }
-.reader-toolbar { animation: reader-ui-in .22s ease-out both; }
-.reader-page-nav, .reader-settings { display: flex; align-items: center; gap: 6px; }
-.reader-page-nav { flex: 1; justify-content: center; }
-.reader-settings { min-width: 210px; justify-content: flex-end; }
-.reader-control { min-height: 33px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 9px; border: 1px solid #e7e5dc; border-radius: 8px; background: #fffefa; color: #606b5d; font-size: 10px; cursor: pointer; }
-.reader-control:hover { border-color: #cdd6c7; background: #f1f4ed; color: var(--green); }
-.reader-location { min-width: 95px; color: #858b80; font-size: 10px; text-align: center; }
-.font-control { min-width: 39px; gap: 0; font-weight: 600; }
-.font-control span { font-family: Georgia, serif; font-size: 13px; }
-.font-size-indicator { color: #9da196; font-size: 9px; }
-.theme-control { min-width: 78px; margin-left: 3px; }
-.reader-viewport { position: relative; min-height: 0; flex: 1; overflow: hidden; background: var(--reader-page); color: var(--reader-ink); }
-.reader-viewport.pdf-viewport { background: #dddcd7; }
-.pdf-reader { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; }
-.pdf-reader-controls { min-height: 48px; display: flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 8px; padding: 5px 12px; border-bottom: 1px solid #e7e4da; background: #fbfaf6; }
-.pdf-control { width: 40px; min-width: 40px; height: 38px; padding: 0; }
-.pdf-page-count, .pdf-zoom-label { min-width: 62px; color: #606b5d; font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
-.pdf-zoom-label { min-width: 48px; font-size: 10px; }
-.pdf-control-spacer { width: 12px; }
-.pdf-page-stage { position: relative; min-height: 0; flex: 1; overflow: auto; display: flex; justify-content: center; padding: 8px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
-.pdf-page-stage.is-zoomed { justify-content: flex-start; }
-.pdf-page-canvas { flex: 0 0 auto; max-width: none; align-self: flex-start; background: #fff; box-shadow: 0 3px 18px #292d281c; transition: opacity .16s ease; }
-.pdf-page-canvas.is-rendering { opacity: .55; }
-.pdf-page-loading { position: absolute; z-index: 1; top: 12px; left: 50%; padding: 7px 11px; border: 1px solid #e7e4da; border-radius: 99px; background: #fffefae8; color: #657060; font-size: 11px; transform: translateX(-50%); pointer-events: none; }
-.pdf-reader-error { max-width: 600px; margin: auto; padding: 24px; color: #8b443b; text-align: center; }
-.image-reader { width: 100%; height: 100%; display: grid; place-items: center; overflow: auto; padding: 20px; }
-.image-reader img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.text-reader { width: min(900px, 100%); height: 100%; overflow: auto; margin: 0 auto; padding: clamp(20px, 6vw, 70px); background: var(--reader-page); color: var(--reader-ink); font: 16px/1.8 "Literata", Georgia, serif; white-space: pre-wrap; overflow-wrap: anywhere; scrollbar-gutter: stable; }
-.epub-canvas { width: min(1200px, 100%); height: 100%; margin: 0 auto; background: var(--reader-page); color: var(--reader-ink); }
-.epub-page { width: 100%; height: 100%; }
-.epub-page iframe { background: var(--reader-page) !important; }
-.azw3-frame { width: 100%; height: 100%; display: block; border: 0; background: var(--reader-page); }
-.reader-loading { position: absolute; z-index: 1; inset: 0; display: flex; align-items: center; justify-content: center; gap: 11px; background: var(--reader-page); color: #838a7e; font-size: 12px; }
-.reader-loading .spin { color: var(--green); animation: spin 1s linear infinite; }
-.reader-error { width: min(520px, calc(100% - 32px)); position: absolute; inset: 50% auto auto 50%; padding: 30px; border: 1px solid #e8e5dc; border-radius: 15px; background: #fffefa; box-shadow: var(--shadow); text-align: center; transform: translate(-50%, -50%); }
-.reader-error-icon { width: 38px; height: 38px; display: grid; place-items: center; margin: auto auto 12px; border-radius: 50%; background: #faefeb; color: #a65042; font: 600 20px var(--serif); }
-.reader-error h2 { margin: 0; font: 500 20px var(--serif); }
-.reader-error p { color: #7e847a; font-size: 11px; line-height: 1.6; }
-.reader-return-link { display: inline-flex; align-items: center; min-height: 38px; padding: 0 14px; border-radius: 8px; background: var(--green); color: #fff; text-decoration: none; font-size: 10px; font-weight: 600; }
-.reader-toast { position: fixed; z-index: 10; right: 18px; bottom: 18px; max-width: min(410px, calc(100% - 36px)); padding: 11px 14px; border: 1px solid #e5e7de; border-radius: 9px; background: #fffefa; color: #52604e; box-shadow: var(--shadow); font-size: 10px; }
-.reader-annotations { position: absolute; z-index: 5; top: 128px; right: 18px; width: min(380px, calc(100% - 36px)); max-height: calc(100dvh - 148px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #e3e3d9; border-radius: 13px; background: #fffefa; color: #303930; box-shadow: 0 16px 45px #18201830; }
-.reader-search-panel { position: absolute; z-index: 5; top: 128px; right: 18px; width: min(380px, calc(100% - 36px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #e3e3d9; border-radius: 13px; background: #fffefa; color: #303930; box-shadow: 0 16px 45px #18201830; }
-.reader-annotations-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid #ecebe3; }
-.reader-annotations-header > div { display: grid; gap: 3px; }
-.reader-annotations-header strong { font-size: 13px; }
-.reader-annotations-header span { color: #858b80; font-size: 10px; }
-.reader-annotation-icon { width: 32px; height: 32px; display: grid; flex: 0 0 auto; place-items: center; border: 0; border-radius: 7px; background: transparent; color: #747b70; cursor: pointer; }
-.reader-annotation-icon:hover { background: #f0f2ec; color: var(--green); }
-.reader-annotation-icon.danger:hover { background: #faece9; color: #b75c50; }
-.reader-note-form { display: grid; gap: 8px; padding: 13px 14px; border-bottom: 1px solid #ecebe3; }
-.reader-note-form label { color: #60695f; font-size: 11px; font-weight: 600; }
-.reader-note-form textarea { width: 100%; resize: vertical; padding: 9px 10px; border: 1px solid #e3e3d9; border-radius: 8px; background: #fff; color: #303930; font: inherit; font-size: 12px; line-height: 1.5; }
-.reader-note-form .reader-control { justify-self: end; }
-.reader-find-form { display: flex; align-items: center; gap: 7px; padding: 13px 14px 8px; }
-.reader-find-input { min-width: 0; height: 38px; display: flex; flex: 1; align-items: center; gap: 8px; padding: 0 9px; border: 1px solid #e3e3d9; border-radius: 8px; color: #788273; }
-.reader-find-input:focus-within { border-color: #b2c4ae; box-shadow: 0 0 0 3px #e9f0e6; }
-.reader-find-input input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: #303930; font-size: 12px; }
-.reader-find-message { margin: 4px 14px 12px; color: #677260; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
-.reader-annotation-error { margin: 0; color: #a34b3f; font-size: 10px; }
-.reader-annotation-list { overflow-y: auto; padding: 6px 10px 10px; }
-.reader-annotation-empty { padding: 8px 4px; color: #858b80; font-size: 11px; }
-.reader-annotation-item { display: flex; align-items: flex-start; gap: 4px; padding: 7px 0; border-bottom: 1px solid #f0efe9; }
-.reader-annotation-jump { min-width: 0; flex: 1; padding: 5px; border: 0; border-radius: 7px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
-.reader-annotation-jump:hover { background: #f5f6f1; }
-.reader-annotation-jump > span { display: flex; align-items: center; gap: 6px; color: #788273; font-size: 10px; }
-.reader-annotation-jump > strong { display: block; margin-top: 5px; font-size: 11px; }
-.reader-annotation-jump > p { overflow-wrap: anywhere; margin: 4px 0 0; color: #737a70; font-size: 11px; line-height: 1.5; }
-.reader-offline-indicator { position: absolute; z-index: 4; left: 16px; bottom: 16px; padding: 8px 11px; border: 1px solid #dce6d7; border-radius: 8px; background: #f5f8f2; color: #50684c; font-size: 10px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-@keyframes reader-ui-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes progress-loading { from { transform: translateX(-40%); } to { transform: translateX(250%); } }
-@media (max-width: 600px) {
-  .reader-header { min-height: 56px; grid-template-columns: auto minmax(0, 1fr) auto; gap: 7px; padding: 0 8px; }
-  .reader-back { gap: 4px; font-size: 9px; }
-  .reader-back > span { width: 31px; height: 31px; }
-  .reader-book-heading strong { font-size: 10px; }
-  .reader-book-heading > span { font-size: 8px; }
-  .reader-header-actions { gap: 3px; }
-  .reader-header-button { width: 30px; height: 30px; }
-  .reader-annotations, .reader-search-panel { top: 108px; right: 10px; width: calc(100% - 20px); max-height: calc(100dvh - 126px); }
-  .reader-progress-strip { gap: 5px; padding: 6px 12px 7px; }
-  .reader-progress-copy { font-size: 9px; }
-  .reader-progress-copy strong { font-size: 10px; }
-  .reader-toolbar { min-height: 49px; gap: 3px; padding: 4px 6px; }
-  .reader-page-nav, .reader-settings { gap: 3px; }
-  .reader-settings { min-width: 0; }
-  .reader-control { min-height: 42px; padding: 0 7px; font-size: 10px; }
-  .reader-location { min-width: 52px; font-size: 9px; }
-  .font-control { min-width: 42px; }
-  .font-size-indicator { display: none; }
-  .theme-control { min-width: 64px; }
-  .pdf-reader-controls { min-height: 56px; gap: 6px; padding: 6px 8px; }
-  .pdf-control { width: 44px; min-width: 44px; height: 44px; }
-  .pdf-page-count { min-width: 54px; font-size: 11px; }
-  .pdf-zoom-label { min-width: 40px; }
-  .pdf-control-spacer { width: 2px; }
-  .pdf-page-stage { padding: 6px; }
-  .reader-error { padding: 23px 18px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
-}
-@media (min-width: 601px) and (max-width: 900px) {
-  .reader-toolbar { padding-right: 14px; padding-left: 14px; }
-  .reader-settings { min-width: 185px; }
-  .reader-control { min-height: 40px; }
-  .pdf-reader-controls { min-height: 54px; }
-  .pdf-control { width: 44px; min-width: 44px; height: 44px; }
+/* ==========================================================================
+   Trang Sách — Minimal, Calm & Friendly Reader Design System
+   ========================================================================== */
+
+html, body, #reader-root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
 }
 
+* { box-sizing: border-box; }
+
+body {
+  min-width: 320px;
+  font-family: "DM Sans", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button, input, textarea { font: inherit; }
+
+/* Theme tokens */
 .reader-app {
-  --green: #47745b;
-  --green-dark: #315640;
-  --shadow: 0 16px 42px rgba(47, 57, 43, .1);
-  --reader-bg: #f3f0e8;
-  color: #293a30;
-  background:
-    radial-gradient(ellipse at 92% 10%, rgba(226, 216, 189, .2), transparent 28rem),
-    var(--reader-bg);
+  --r-bg: #f4f2ec;
+  --r-page: #fffefa;
+  --r-surface: rgba(255, 253, 248, 0.94);
+  --r-surface-solid: #fffdf8;
+  --r-subtle: #f4f3ec;
+  --r-hover: #edf2ea;
+  --r-border: #e5e2d8;
+  --r-ink: #243026;
+  --r-muted: #6c776b;
+  --r-accent: #3d6b4f;
+  --r-accent-soft: #e6f0e7;
+  --r-accent-border: #bfd4c1;
+  --r-danger: #b54d3f;
+  --r-danger-soft: #fbedea;
+  --r-shadow: 0 12px 36px rgba(28, 38, 29, 0.12);
+  --r-shadow-sm: 0 4px 16px rgba(28, 38, 29, 0.08);
+  --serif: "Literata", Georgia, serif;
+
+  position: relative;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--r-bg);
+  color: var(--r-ink);
 }
-.reader-theme-sepia { --reader-page: #f5ead5; --reader-ink: #45392d; --reader-bg: #eee7d9; }
-.reader-theme-dark { --reader-page: #202820; --reader-ink: #eee9df; --reader-bg: #191f1a; }
+
+.reader-theme-sepia {
+  --r-bg: #ebe1ce;
+  --r-page: #f5ebd7;
+  --r-surface: rgba(245, 236, 219, 0.95);
+  --r-surface-solid: #f7eedc;
+  --r-subtle: #ede2cc;
+  --r-hover: #e5d8bf;
+  --r-border: #dfd1b8;
+  --r-ink: #43372a;
+  --r-muted: #7b6c5a;
+  --r-accent: #526e4d;
+  --r-accent-soft: #e3e7d5;
+  --r-accent-border: #c3ccb2;
+}
+
+.reader-theme-dark {
+  --r-bg: #171c18;
+  --r-page: #1f2520;
+  --r-surface: rgba(28, 34, 29, 0.94);
+  --r-surface-solid: #232a24;
+  --r-subtle: #283029;
+  --r-hover: #303b31;
+  --r-border: #333d34;
+  --r-ink: #e8ece2;
+  --r-muted: #9ea99b;
+  --r-accent: #82b58e;
+  --r-accent-soft: #293c2e;
+  --r-accent-border: #44624a;
+  --r-danger: #e28478;
+  --r-danger-soft: #3a2624;
+  --r-shadow: 0 16px 44px rgba(0, 0, 0, 0.42);
+  --r-shadow-sm: 0 6px 20px rgba(0, 0, 0, 0.28);
+}
+
+.reader-app :is(button, a, input, textarea):focus-visible {
+  outline: 2.5px solid var(--r-accent);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Slim Single-Row Header + Hairline Progress
+   ========================================================================== */
 .reader-header {
-  min-height: 68px;
-  border-bottom-color: #e4dfd4;
-  background: rgba(255, 253, 248, .9);
-  box-shadow: 0 4px 18px #293a3008;
-}
-.reader-back { color: #526553; font-size: 12px; }
-.reader-back > span {
-  border-color: #e4e6dc;
-  background: linear-gradient(145deg, #fffefa, #f3f3eb);
-}
-.reader-back:hover { color: #315640; }
-.reader-book-heading strong { color: #293a30; font-size: 13px; }
-.reader-book-heading > span { color: #737e72; font-size: 10px; }
-.reader-header-button {
-  width: 40px;
-  height: 40px;
-  border-color: #e4dfd4;
-  background: #fffdf8;
-  color: #5a705e;
-  box-shadow: 0 2px 7px #303a2b08;
-}
-.reader-header-button:hover:not(:disabled), .reader-header-button.is-read {
-  border-color: #d0dfce;
-  background: #e9f1e6;
-  color: #3e6c4d;
-}
-.reader-progress-strip, .reader-toolbar {
-  border-bottom-color: #e5e0d5;
-  background: rgba(251, 249, 242, .96);
-}
-.reader-progress-copy { color: #687568; font-size: 11px; }
-.reader-progress-copy strong { color: #365b43; font-size: 12px; }
-.reader-progress-track { height: 6px; background: #e5e8de; }
-.reader-progress-track > span { background: linear-gradient(90deg, #8ca878, #47745b); }
-.reader-control {
-  min-height: 40px;
-  padding: 0 11px;
-  border-color: #e3dfd4;
-  border-radius: 11px;
-  background: #fffdf8;
-  color: #536453;
-  font-size: 11px;
-}
-.reader-control:hover:not(:disabled) {
-  border-color: #cfddca;
-  background: #eef3e9;
-  color: #315640;
-  box-shadow: 0 4px 12px #31564012;
-}
-.reader-location { color: #727d70; font-size: 11px; }
-.font-size-indicator { color: #788273; font-size: 10px; }
-.reader-viewport { background-color: var(--reader-page); }
-.reader-viewport.pdf-viewport { background: #e8e4da; }
-.pdf-reader-controls {
-  border-bottom-color: #e3ded2;
-  background: #faf8f1;
-}
-.pdf-page-canvas { box-shadow: 0 8px 26px #34382c20; }
-.pdf-page-loading {
-  border-color: #e4dfd4;
-  background: #fffdf2ed;
-  color: #536453;
-}
-.reader-annotations, .reader-search-panel {
-  border-color: #e4dfd4;
-  border-radius: 18px;
-  background: #fffdf8;
-  box-shadow: 0 20px 55px #18201828;
-}
-.reader-annotations-header { border-bottom-color: #ece8de; }
-.reader-annotations-header strong { color: #2e4134; font-size: 14px; }
-.reader-annotations-header span { color: #737e72; font-size: 11px; }
-.reader-annotation-icon { border-radius: 10px; }
-.reader-note-form { border-bottom-color: #ece8de; }
-.reader-note-form label { color: #526353; font-size: 12px; }
-.reader-note-form textarea, .reader-find-input {
-  border-color: #e1ddd2;
-  border-radius: 11px;
-  background: #fffefa;
-}
-.reader-note-form textarea:focus, .reader-find-input:focus-within {
-  border-color: #9eb79c;
-  box-shadow: 0 0 0 4px #e6efe2;
-}
-.reader-find-input input { font-size: 13px; }
-.reader-annotation-jump { border-radius: 10px; }
-.reader-annotation-jump:hover { background: #f1f4ec; }
-.reader-offline-indicator {
-  border-color: #d8e4d4;
-  border-radius: 11px;
-  background: #f5f8f0;
-  color: #456749;
-}
-.reader-toast {
-  border-color: #dfe7da;
-  border-radius: 14px;
-  background: #fffdf8;
-  color: #405b45;
-  box-shadow: 0 16px 42px #25302220;
-  font-size: 11px;
-}
-
-.reader-app button:focus-visible, .reader-app textarea:focus-visible {
-  outline: 3px solid #8eaf87;
-  outline-offset: 3px;
-}
-
-@media (max-width: 600px) {
-  .reader-header {
-    min-height: 62px;
-    gap: 6px;
-    padding-right: max(10px, env(safe-area-inset-right));
-    padding-left: max(10px, env(safe-area-inset-left));
-  }
-  .reader-back { font-size: 10px; }
-  .reader-back > span { width: 36px; height: 36px; }
-  .reader-book-heading strong { font-size: 11px; }
-  .reader-book-heading > span { font-size: 9px; }
-  .reader-header-button { width: 36px; height: 36px; }
-  .reader-progress-strip { padding-right: 13px; padding-left: 13px; }
-  .reader-toolbar {
-    min-height: 56px;
-    padding-right: 8px;
-    padding-left: 8px;
-  }
-  .reader-control { min-height: 44px; border-radius: 12px; }
-  .reader-location { min-width: 60px; font-size: 10px; }
-  .theme-control { min-width: 68px; }
-  .reader-annotations, .reader-search-panel {
-    top: 126px;
-    right: 10px;
-    width: calc(100% - 20px);
-    max-height: calc(100dvh - 142px - env(safe-area-inset-bottom));
-    border-radius: 17px;
-  }
-  .reader-annotation-list { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
-  .pdf-reader-controls {
-    min-height: 60px;
-    gap: 7px;
-    padding-right: max(10px, env(safe-area-inset-right));
-    padding-left: max(10px, env(safe-area-inset-left));
-  }
-  .pdf-control { width: 44px; min-width: 44px; height: 44px; }
-  .reader-toast {
-    right: 12px;
-    bottom: max(12px, env(safe-area-inset-bottom));
-  }
-}
-
-.reader-header {
-  min-height: 72px;
-  grid-template-columns: minmax(110px, 1fr) minmax(0, 2fr) minmax(0, 1.6fr);
-  gap: 20px;
-  padding-right: clamp(20px, 4vw, 64px);
-  padding-left: clamp(20px, 4vw, 64px);
-}
-
-.reader-book-heading { justify-items: start; text-align: left; }
-.reader-book-heading strong { font-size: 15px; letter-spacing: -.15px; }
-.reader-book-heading > span { font-size: 11px; letter-spacing: .25px; }
-.reader-header-actions { gap: 8px; }
-.reader-header-button { width: 42px; height: 42px; }
-
-.reader-progress-strip { gap: 8px; padding-top: 10px; padding-bottom: 12px; }
-.reader-progress-copy { font-size: 12px; }
-.reader-progress-copy strong { font-size: 13px; }
-.reader-progress-track { height: 7px; }
-
-.reader-toolbar {
+  position: relative;
+  z-index: 6;
+  height: 56px;
+  flex: 0 0 auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 1fr minmax(0, 1.5fr) 1fr;
   align-items: center;
-  min-height: 62px;
-  gap: 20px;
-  padding: 9px clamp(20px, 4vw, 64px);
-}
-.reader-page-nav { justify-content: flex-start; gap: 10px; }
-.reader-settings { min-width: 0; gap: 8px; }
-.reader-control { min-height: 42px; padding-right: 13px; padding-left: 13px; font-size: 12px; }
-.reader-location { min-width: 120px; font-size: 12px; }
-.font-size-indicator { min-width: 38px; font-size: 11px; text-align: center; }
-.theme-control { min-width: 90px; }
-
-.reader-viewport:not(.pdf-viewport) { background: var(--reader-bg); }
-.text-reader {
-  width: min(820px, 100%);
-  padding: clamp(28px, 7vw, 88px) clamp(24px, 8vw, 96px);
-  box-shadow: 0 0 60px rgba(48, 47, 36, .035);
-  font-size: clamp(17px, 1.35vw, 20px);
-  line-height: 1.9;
-  letter-spacing: .01em;
-}
-.epub-canvas {
-  width: min(960px, 100%);
-  box-shadow: 0 0 60px rgba(48, 47, 36, .035);
-}
-.pdf-reader-controls { min-height: 58px; gap: 10px; }
-.pdf-control { width: 44px; min-width: 44px; height: 42px; }
-.pdf-page-count, .pdf-zoom-label { font-size: 13px; }
-.pdf-page-stage { padding: clamp(12px, 2.5vw, 28px); }
-
-.reader-theme-dark .reader-header,
-.reader-theme-dark .reader-progress-strip,
-.reader-theme-dark .reader-toolbar,
-.reader-theme-dark .pdf-reader-controls {
-  border-color: #343c34;
-  background: #222a23;
-}
-.reader-theme-dark .reader-book-heading strong,
-.reader-theme-dark .reader-control,
-.reader-theme-dark .reader-progress-copy strong { color: #e6e9df; }
-.reader-theme-dark .reader-book-heading > span,
-.reader-theme-dark .reader-progress-copy,
-.reader-theme-dark .reader-location,
-.reader-theme-dark .font-size-indicator { color: #b4bdaf; }
-.reader-theme-dark .reader-back { color: #c5d0c0; }
-.reader-theme-dark .reader-back > span {
-  border-color: #424d41;
-  background: #2a332b;
-  color: #d7dfd2;
-}
-.reader-theme-dark .reader-control,
-.reader-theme-dark .reader-header-button {
-  border-color: #424d41;
-  background: #2a332b;
-  color: #d7dfd2;
-}
-.reader-theme-dark .reader-control:hover:not(:disabled),
-.reader-theme-dark .reader-header-button:hover:not(:disabled),
-.reader-theme-dark .reader-header-button.is-read {
-  border-color: #60735d;
-  background: #344333;
-  color: #e4efdf;
-}
-.reader-theme-dark .reader-progress-track { background: #3a4538; }
-.reader-theme-dark .reader-viewport:not(.pdf-viewport) { background: #191f1a; }
-.reader-theme-dark .pdf-viewport,
-.reader-theme-dark .pdf-reader-controls { background: #252b25; }
-.reader-theme-dark .pdf-page-count,
-.reader-theme-dark .pdf-zoom-label { color: #d7dfd2; }
-.reader-theme-dark .reader-error,
-.reader-theme-dark .reader-annotations,
-.reader-theme-dark .reader-search-panel {
-  border-color: #424d41;
-  background: #252d26;
-  color: #e6e9df;
-}
-.reader-theme-dark .reader-error h2,
-.reader-theme-dark .reader-annotations-header strong { color: #e6e9df; }
-.reader-theme-dark .reader-error p,
-.reader-theme-dark .reader-annotations-header span,
-.reader-theme-dark .reader-annotation-jump > p { color: #b4bdaf; }
-.reader-theme-dark .reader-note-form textarea,
-.reader-theme-dark .reader-find-input {
-  border-color: #424d41;
-  background: #1e251f;
-  color: #e6e9df;
+  gap: 12px;
+  padding: 0 clamp(10px, 2vw, 24px);
+  border-bottom: 1px solid var(--r-border);
+  background: var(--r-surface);
+  backdrop-filter: blur(14px);
 }
 
-@media (max-width: 760px) {
-  .reader-header {
-    min-height: 0;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas:
-      "back book"
-      "actions actions";
-    gap: 8px 12px;
-    padding: 10px max(14px, env(safe-area-inset-right)) 8px max(14px, env(safe-area-inset-left));
-  }
-  .reader-back { grid-area: back; font-size: 12px; }
-  .reader-book-heading { grid-area: book; min-width: 0; }
-  .reader-book-heading strong { font-size: 14px; }
-  .reader-book-heading > span { font-size: 10px; }
-  .reader-header-actions {
-    grid-area: actions;
-    width: 100%;
-    justify-content: flex-start;
-    gap: 8px;
-    overflow-x: auto;
-    padding: 1px 2px 7px;
-    overscroll-behavior-x: contain;
-    scrollbar-width: thin;
-    -webkit-overflow-scrolling: touch;
-  }
-  .reader-header-button { width: 42px; height: 42px; flex: 0 0 42px; }
-  .reader-toolbar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    min-height: 0;
-    gap: 8px;
-    padding: 9px max(14px, env(safe-area-inset-left));
-  }
-  .reader-page-nav { justify-content: center; }
-  .reader-settings { justify-content: center; }
-  .reader-annotations, .reader-search-panel { top: 205px; }
-  .reader-viewport:not(.pdf-viewport) { background: var(--reader-page); }
-  .text-reader { padding: 28px clamp(20px, 7vw, 36px); }
-  .epub-canvas { width: 100%; }
-  .pdf-reader-controls { min-height: 58px; }
+.reader-header-left,
+.reader-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
+.reader-header-actions { justify-content: flex-end; }
 
-@media (max-width: 380px) {
-  .reader-header { gap: 7px 8px; }
-  .reader-header-actions { gap: 6px; }
-  .reader-toolbar { padding-right: 8px; padding-left: 8px; }
-  .reader-page-nav { gap: 5px; }
-  .reader-page-nav .reader-control { gap: 2px; padding-right: 8px; padding-left: 8px; }
-  .reader-location { min-width: 68px; }
-  .reader-settings { gap: 5px; }
-  .pdf-reader-controls { gap: 5px; }
-  .pdf-control { width: 40px; min-width: 40px; }
-  .pdf-control-spacer { width: 0; }
-}
-
-.reader-theme-sepia .reader-viewport:not(.pdf-viewport) { background: #eee7d9; }
-.reader-theme-sepia .reader-header,
-.reader-theme-sepia .reader-progress-strip,
-.reader-theme-sepia .reader-toolbar,
-.reader-theme-sepia .pdf-reader-controls { background: #f2eadc; }
-
-.pdf-reader-controls { position: relative; z-index: 1; }
-.pdf-page-stage { display: block; padding: 18px 16px 32px; }
-.pdf-page-stage.is-zoomed { display: block; }
-.pdf-page-stack {
-  display: grid;
-  justify-items: center;
-  gap: 20px;
-  width: max-content;
-  min-width: 100%;
-  margin: 0 auto;
-}
-.pdf-page-stage.is-zoomed .pdf-page-stack {
-  justify-items: start;
-  margin-right: 0;
-  margin-left: 0;
-}
-.pdf-page-card {
+.reader-pill-btn,
+.reader-icon-btn {
   position: relative;
-  display: grid;
-  place-items: start center;
-  overflow: hidden;
-  background: #fff;
-  box-shadow: 0 8px 26px #34382c20;
-  contain: layout paint;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--r-muted);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
-.pdf-page-card > .pdf-page-canvas {
-  display: block;
-  flex: none;
-  align-self: auto;
+.reader-pill-btn { padding: 0 11px; }
+.reader-icon-btn { width: 36px; padding: 0; }
+
+.reader-pill-btn:hover:not(:disabled),
+.reader-icon-btn:hover:not(:disabled) {
+  background: var(--r-hover);
+  color: var(--r-ink);
 }
-.pdf-page-placeholder {
-  width: 100%;
-  height: 100%;
-  background:
-    linear-gradient(110deg, transparent 20%, #f5f4f0 45%, transparent 70%),
-    #fff;
-  background-size: 220% 100%;
-  animation: pdf-page-placeholder 1.4s ease-in-out infinite;
+.reader-pill-btn.is-active,
+.reader-icon-btn.is-active {
+  border-color: var(--r-accent-border);
+  background: var(--r-accent-soft);
+  color: var(--r-accent);
+  font-weight: 600;
 }
-.pdf-page-label {
-  position: absolute;
-  z-index: 1;
-  top: 10px;
-  right: 10px;
-  padding: 5px 8px;
-  border: 1px solid #e8e5dc;
-  border-radius: 999px;
-  background: #fffefaed;
-  color: #687568;
-  font: 11px/1.2 "DM Sans", sans-serif;
-  opacity: 0;
-  transition: opacity .16s ease;
-}
-.pdf-page-card:hover .pdf-page-label,
-.pdf-page-card:focus-within .pdf-page-label { opacity: 1; }
-.pdf-page-card .pdf-page-loading { top: 12px; }
-.reader-theme-dark .pdf-page-placeholder {
-  background:
-    linear-gradient(110deg, transparent 20%, #eee 45%, transparent 70%),
-    #fff;
+.reader-pill-btn:disabled,
+.reader-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
-.azw3-chapter-stage {
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
-}
-.azw3-chapter-stack {
-  display: grid;
-  gap: 16px;
-  width: min(100%, 1000px);
-  margin: 0 auto;
-  padding: 16px clamp(8px, 2vw, 24px) 32px;
-}
-.azw3-chapter-card {
-  position: relative;
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid #e6e1d6;
-  border-radius: 8px;
-  background: var(--reader-page);
-  box-shadow: 0 8px 26px rgba(41, 45, 40, .08);
-  contain: layout paint;
-}
-.azw3-frame {
-  width: 100%;
-  display: block;
-  border: 0;
-  background: var(--reader-page);
-}
-.azw3-chapter-placeholder {
-  min-height: inherit;
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 8px;
-  padding: 24px;
-  color: #788273;
-  text-align: center;
-}
-.azw3-chapter-placeholder strong {
-  color: #4a5e4d;
-  font: 500 18px/1.3 "Literata", Georgia, serif;
-}
-.azw3-chapter-placeholder span { font-size: 12px; }
-.azw3-chapter-error {
-  display: grid;
-  min-height: 160px;
-  place-items: center;
-  padding: 24px;
-  color: #a34b3f;
-  font-size: 14px;
-  text-align: center;
-}
-.reader-theme-sepia .azw3-chapter-card { border-color: #e2d6c3; }
-.reader-theme-dark .azw3-chapter-card {
-  border-color: #3a4439;
-  background: var(--reader-page);
-  box-shadow: 0 8px 26px rgba(0, 0, 0, .18);
-}
-.reader-theme-dark .azw3-chapter-placeholder { color: #b4bdaf; }
-.reader-theme-dark .azw3-chapter-placeholder strong { color: #e6e9df; }
-
-@keyframes pdf-page-placeholder {
-  to { background-position: -220% 0; }
-}
-
-@media (max-width: 760px) {
-  .pdf-page-stage { padding: 12px 8px 24px; }
-  .pdf-page-stack { gap: 12px; }
-  .pdf-page-label { top: 7px; right: 7px; font-size: 10px; }
-  .azw3-chapter-stack { gap: 10px; padding: 10px 6px 24px; }
-  .azw3-chapter-card { border-radius: 4px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .reader-progress-strip, .reader-toolbar { animation: none; }
-  .pdf-page-placeholder { animation: none; }
-}
-
-/* Reader UX enhancements: Zen mode, TOC, PDF jump & EPUB edge zones */
-.reader-header-button { position: relative; }
 .reader-badge {
   position: absolute;
-  top: -3px;
-  right: -3px;
-  min-width: 17px;
-  height: 17px;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
   display: inline-grid;
   place-items: center;
   padding: 0 4px;
   border-radius: 99px;
-  background: var(--green);
+  background: var(--r-accent);
   color: #fff;
-  font: 700 9px/1 "DM Sans", sans-serif;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .18);
+  font: 700 9.5px/1 "DM Sans", sans-serif;
 }
 
-.reader-control.is-active {
-  border-color: #c2d4bd;
-  background: #e9f1e6;
-  color: var(--green-dark);
+.reader-book-heading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  text-align: center;
 }
-.reader-theme-dark .reader-control.is-active {
-  border-color: #60735d;
-  background: #344333;
-  color: #e4efdf;
+.reader-book-heading strong {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--r-ink);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.reader-book-heading > span {
+  color: var(--r-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
+.reader-progress-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 3px;
+  background: transparent;
+  overflow: hidden;
+  pointer-events: none;
+}
+.reader-progress-line > span {
+  display: block;
+  height: 100%;
+  background: var(--r-accent);
+  transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.reader-progress-line.is-indeterminate > span {
+  width: 28% !important;
+  animation: progress-loading 1.2s ease-in-out infinite alternate;
+}
+
+.reader-feature-warning {
+  padding: 8px 16px;
+  border-bottom: 1px solid #e7d8b6;
+  background: #fbf5e8;
+  color: #756343;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Zen / Focus mode */
 .reader-app.is-zen .reader-header,
-.reader-app.is-zen .reader-toolbar,
-.reader-app.is-zen .reader-progress-strip {
+.reader-app.is-zen .reader-toc-sidebar,
+.reader-app.is-zen .reader-toc-scrim {
   display: none;
 }
-
 .reader-zen-exit {
   position: fixed;
-  z-index: 8;
+  z-index: 10;
   top: max(14px, env(safe-area-inset-top));
   right: max(16px, env(safe-area-inset-right));
-  min-height: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 13px;
-  border: 1px solid #dcd9ce;
+  padding: 0 14px;
+  border: 1px solid var(--r-border);
   border-radius: 999px;
-  background: rgba(255, 253, 248, .88);
-  backdrop-filter: blur(10px);
-  color: #4b5d4c;
-  box-shadow: 0 8px 24px rgba(34, 42, 33, .12);
-  font-size: 11px;
+  background: var(--r-surface);
+  backdrop-filter: blur(12px);
+  color: var(--r-ink);
+  box-shadow: var(--r-shadow-sm);
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  opacity: .55;
-  transition: opacity .2s ease, transform .16s ease;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
 }
 .reader-zen-exit:hover,
-.reader-zen-exit:focus-visible {
-  opacity: 1;
-  transform: translateY(-1px);
-}
-.reader-theme-dark .reader-zen-exit {
-  border-color: #424d41;
-  background: rgba(34, 42, 35, .9);
-  color: #e4efdf;
-}
+.reader-zen-exit:focus-visible { opacity: 1; }
 
-.reader-toc-panel {
-  position: absolute;
-  z-index: 5;
-  top: 128px;
-  left: clamp(14px, 3vw, 45px);
-  width: min(360px, calc(100% - 28px));
-  max-height: calc(100dvh - 148px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid #e4dfd4;
-  border-radius: 18px;
-  background: #fffdf8;
-  color: #303930;
-  box-shadow: 0 20px 55px #18201828;
-  animation: reader-ui-in .18s ease-out both;
-}
-.reader-theme-dark .reader-toc-panel {
-  border-color: #424d41;
-  background: #252d26;
-  color: #e6e9df;
-}
-.reader-toc-list {
-  overflow-y: auto;
-  padding: 8px 10px 12px;
-  display: grid;
-  gap: 2px;
-}
-.reader-toc-item {
-  width: 100%;
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  padding: 7px 12px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: inherit;
-  font-size: 12px;
-  line-height: 1.4;
-  text-align: left;
-  cursor: pointer;
-}
-.reader-toc-item:hover {
-  background: #f1f4ec;
-  color: var(--green-dark);
-}
-.reader-toc-item.is-active {
-  background: #e9f1e6;
-  color: var(--green-dark);
-  font-weight: 600;
-}
-.reader-theme-dark .reader-toc-item:hover,
-.reader-theme-dark .reader-toc-item.is-active {
-  background: #344333;
-  color: #e4efdf;
-}
-
-.epub-canvas {
-  position: relative;
-}
-.epub-edge-zone {
-  position: absolute;
-  z-index: 2;
-  top: 0;
-  bottom: 0;
-  width: clamp(24px, 4.5vw, 54px);
-  border: 0;
-  padding: 0;
-  background: transparent;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity .18s ease, background-color .18s ease;
-}
-.epub-edge-zone.is-prev { left: 0; }
-.epub-edge-zone.is-next { right: 0; }
-.epub-edge-zone:hover,
-.epub-edge-zone:focus-visible {
-  opacity: 1;
-  background: rgba(71, 116, 91, .06);
-}
-
-.pdf-page-jump {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: #606b5d;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-.pdf-page-jump input {
-  width: 52px;
-  height: 36px;
-  padding: 0 6px;
-  border: 1px solid #e1ddd2;
-  border-radius: 9px;
-  background: #fffdf8;
-  color: #293a30;
-  font: inherit;
-  font-size: 12px;
-  text-align: center;
-  appearance: textfield;
-}
-.pdf-page-jump input::-webkit-outer-spin-button,
-.pdf-page-jump input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.pdf-zoom-reset {
-  min-width: 64px;
-  height: 38px;
-  padding: 0 9px;
-  font-variant-numeric: tabular-nums;
-}
-.reader-theme-dark .pdf-page-jump { color: #d7dfd2; }
-.reader-theme-dark .pdf-page-jump input {
-  border-color: #424d41;
-  background: #1e251f;
-  color: #e6e9df;
-}
-
-@media (max-width: 760px) {
-  .reader-toc-panel,
-  .reader-shortcuts-panel {
-    top: 205px;
-    left: 10px;
-    right: 10px;
-    width: calc(100% - 20px);
-    max-height: calc(100dvh - 220px - env(safe-area-inset-bottom));
-  }
-}
-
-.reader-shortcuts-panel {
-  position: absolute;
-  z-index: 5;
-  top: 128px;
-  right: 18px;
-  width: min(390px, calc(100% - 36px));
-  max-height: calc(100dvh - 148px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid #e4dfd4;
-  border-radius: 18px;
-  background: #fffdf8;
-  color: #303930;
-  box-shadow: 0 20px 55px #18201828;
-  animation: reader-ui-in .18s ease-out both;
-}
-.reader-theme-dark .reader-shortcuts-panel {
-  border-color: #424d41;
-  background: #252d26;
-  color: #e6e9df;
-}
-.reader-shortcuts-list {
-  margin: 0;
-  padding: 10px 14px 14px;
-  overflow-y: auto;
-  display: grid;
-  gap: 8px;
-}
-.reader-shortcuts-list > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding-bottom: 7px;
-  border-bottom: 1px dashed #ece8de;
-  font-size: 11.5px;
-}
-.reader-shortcuts-list > div:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-.reader-theme-dark .reader-shortcuts-list > div {
-  border-bottom-color: #384237;
-}
-.reader-shortcuts-list dt {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  color: #5b695a;
-  font-size: 11px;
-}
-.reader-theme-dark .reader-shortcuts-list dt { color: #b9c4b4; }
-.reader-shortcuts-list dd {
-  margin: 0;
-  color: inherit;
-  text-align: right;
-}
-.reader-shortcuts-list kbd {
-  min-width: 22px;
-  height: 22px;
-  display: inline-grid;
-  place-items: center;
-  padding: 0 6px;
-  border: 1px solid #dcd8cc;
-  border-bottom-width: 2px;
-  border-radius: 6px;
-  background: #f6f4ec;
-  color: #2e3d30;
-  font: 600 10.5px/1 "DM Sans", monospace;
-}
-.reader-theme-dark .reader-shortcuts-list kbd {
-  border-color: #4a5649;
-  background: #1d241e;
-  color: #e6e9df;
-}
-
-/* Left docked Table of Contents sidebar */
+/* ==========================================================================
+   Main Body: Docked Left TOC Sidebar + Reading Viewport
+   ========================================================================== */
 .reader-body {
   position: relative;
   min-height: 0;
@@ -900,45 +263,29 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
   display: flex;
   overflow: hidden;
 }
-.reader-app.is-zen .reader-toc-sidebar,
-.reader-app.is-zen .reader-toc-scrim {
-  display: none;
-}
-.reader-toc-scrim {
-  display: none;
-}
+
+.reader-toc-scrim { display: none; }
+
 .reader-toc-sidebar {
-  width: clamp(240px, 22vw, 310px);
+  width: clamp(240px, 21vw, 300px);
   flex: 0 0 auto;
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-right: 1px solid #e4dfd4;
-  background: #fbfaf6;
-  color: #2f3b31;
+  border-right: 1px solid var(--r-border);
+  background: var(--r-surface-solid);
+  color: var(--r-ink);
   z-index: 4;
-}
-.reader-theme-sepia .reader-toc-sidebar {
-  border-right-color: #e2d6c3;
-  background: #f2eadc;
-  color: #45392d;
-}
-.reader-theme-dark .reader-toc-sidebar {
-  border-right-color: #343c34;
-  background: #202721;
-  color: #e6e9df;
 }
 .reader-toc-sidebar-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 12px 12px 10px 14px;
-  border-bottom: 1px solid #ece8de;
+  padding: 12px 10px 10px 14px;
+  border-bottom: 1px solid var(--r-border);
 }
-.reader-theme-sepia .reader-toc-sidebar-head { border-bottom-color: #e5dac6; }
-.reader-theme-dark .reader-toc-sidebar-head { border-bottom-color: #343c34; }
 .reader-toc-sidebar-head > span {
   display: inline-flex;
   align-items: center;
@@ -949,30 +296,26 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
   font-style: normal;
   padding: 2px 7px;
   border-radius: 99px;
-  background: #e9f0e6;
-  color: var(--green-dark);
-  font-size: 10.5px;
+  background: var(--r-accent-soft);
+  color: var(--r-accent);
+  font-size: 11px;
   font-weight: 600;
-}
-.reader-theme-dark .reader-toc-sidebar-head em {
-  background: #2e3b2e;
-  color: #cfe0ca;
 }
 .reader-toc-filter {
   display: flex;
   align-items: center;
   gap: 7px;
   margin: 10px 10px 4px;
-  padding: 0 9px;
-  height: 34px;
-  border: 1px solid #e1ddd2;
-  border-radius: 9px;
-  background: #fffdf8;
-  color: #788273;
+  padding: 0 10px;
+  height: 36px;
+  border: 1px solid var(--r-border);
+  border-radius: 10px;
+  background: var(--r-subtle);
+  color: var(--r-muted);
 }
 .reader-toc-filter:focus-within {
-  border-color: #9eb79c;
-  box-shadow: 0 0 0 3px #e6efe2;
+  border-color: var(--r-accent-border);
+  background: var(--r-surface-solid);
 }
 .reader-toc-filter input {
   min-width: 0;
@@ -980,25 +323,34 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
   border: 0;
   outline: 0;
   background: transparent;
-  color: inherit;
-  font-size: 12px;
-}
-.reader-theme-dark .reader-toc-filter {
-  border-color: #3f4a3e;
-  background: #1a201b;
-  color: #cfd8ca;
+  color: var(--r-ink);
+  font-size: 12.5px;
 }
 .reader-toc-sidebar-list {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 8px 16px;
+  padding: 6px 8px 20px;
   display: grid;
   align-content: start;
   gap: 2px;
 }
 .reader-toc-item {
+  width: 100%;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--r-ink);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease;
 }
 .reader-toc-item > span {
   min-width: 0;
@@ -1008,41 +360,247 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
 }
 .reader-toc-item > small {
   flex: 0 0 auto;
-  color: #859082;
-  font-size: 10.5px;
+  color: var(--r-muted);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
-.reader-theme-dark .reader-toc-item > small { color: #9aa596; }
+.reader-toc-item:hover { background: var(--r-hover); }
+.reader-toc-item.is-active {
+  background: var(--r-accent-soft);
+  color: var(--r-accent);
+  font-weight: 600;
+}
 .reader-toc-empty {
-  padding: 12px 10px;
+  padding: 14px 10px;
   margin: 0;
-  color: #858b80;
-  font-size: 11.5px;
+  color: var(--r-muted);
+  font-size: 12.5px;
 }
 
-@media (max-width: 899px) {
-  .reader-toc-scrim {
-    display: block;
-    position: absolute;
-    inset: 0;
-    z-index: 4;
-    border: 0;
-    padding: 0;
-    background: rgba(20, 26, 20, .34);
-    cursor: pointer;
-  }
-  .reader-toc-sidebar {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 5;
-    width: min(300px, 84vw);
-    box-shadow: 12px 0 36px rgba(20, 26, 20, .2);
-  }
+/* ==========================================================================
+   Reading Viewport & Content Formats
+   ========================================================================== */
+.reader-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  background: var(--r-bg);
+  color: var(--r-ink);
+}
+.reader-viewport.pdf-viewport {
+  background: var(--r-bg);
 }
 
-/* PDF selectable text layer for in-place translation */
+.epub-canvas {
+  position: relative;
+  width: min(860px, 100%);
+  height: 100%;
+  margin: 0 auto;
+  background: var(--r-page);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.04);
+}
+.epub-page { width: 100%; height: 100%; }
+.epub-page iframe { background: var(--r-page) !important; }
+
+.epub-edge-zone {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  width: clamp(22px, 4vw, 48px);
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.16s ease, background-color 0.16s ease;
+}
+.epub-edge-zone.is-prev { left: 0; }
+.epub-edge-zone.is-next { right: 0; }
+.epub-edge-zone:hover,
+.epub-edge-zone:focus-visible {
+  opacity: 1;
+  background: rgba(61, 107, 79, 0.06);
+}
+
+.text-reader {
+  width: min(780px, 100%);
+  height: 100%;
+  overflow: auto;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 72px) clamp(20px, 6vw, 72px) 84px;
+  background: var(--r-page);
+  color: var(--r-ink);
+  font: 19px/1.85 var(--serif);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  scrollbar-gutter: stable;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.04);
+}
+
+.image-reader {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 24px;
+}
+.image-reader img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+/* AZW3 */
+.azw3-chapter-stage {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+.azw3-chapter-stack {
+  display: grid;
+  gap: 16px;
+  width: min(100%, 880px);
+  margin: 0 auto;
+  padding: 20px clamp(10px, 2vw, 24px) 84px;
+}
+.azw3-chapter-card {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--r-border);
+  border-radius: 10px;
+  background: var(--r-page);
+  box-shadow: var(--r-shadow-sm);
+  contain: layout paint;
+}
+.azw3-frame {
+  width: 100%;
+  display: block;
+  border: 0;
+  background: var(--r-page);
+}
+.azw3-chapter-placeholder {
+  min-height: inherit;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  padding: 24px;
+  color: var(--r-muted);
+  text-align: center;
+}
+.azw3-chapter-placeholder strong { font: 500 18px/1.3 var(--serif); color: var(--r-ink); }
+.azw3-chapter-placeholder span { font-size: 12.5px; }
+.azw3-chapter-error {
+  display: grid;
+  min-height: 160px;
+  place-items: center;
+  padding: 24px;
+  color: var(--r-danger);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* PDF */
+.pdf-reader {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pdf-page-stage {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 20px 16px 84px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.pdf-page-stack {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  width: max-content;
+  min-width: 100%;
+  margin: 0 auto;
+}
+.pdf-page-stage.is-zoomed .pdf-page-stack {
+  justify-items: start;
+  margin: 0;
+}
+.pdf-page-card {
+  position: relative;
+  display: grid;
+  place-items: start center;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+  contain: layout paint;
+}
+.pdf-page-canvas {
+  display: block;
+  background: #fff;
+  transition: opacity 0.16s ease;
+}
+.pdf-page-canvas.is-rendering { opacity: 0.55; }
+.pdf-page-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(110deg, transparent 20%, #f3f2ed 45%, transparent 70%), #fff;
+  background-size: 220% 100%;
+  animation: pdf-page-placeholder 1.4s ease-in-out infinite;
+}
+.pdf-page-label {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  right: 10px;
+  padding: 4px 9px;
+  border: 1px solid var(--r-border);
+  border-radius: 999px;
+  background: var(--r-surface);
+  color: var(--r-muted);
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  pointer-events: none;
+}
+.pdf-page-card:hover .pdf-page-label { opacity: 1; }
+.pdf-page-loading {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border: 1px solid var(--r-border);
+  border-radius: 99px;
+  background: var(--r-surface);
+  color: var(--r-muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+.pdf-reader-error {
+  max-width: 520px;
+  margin: auto;
+  padding: 24px;
+  color: var(--r-danger);
+  text-align: center;
+}
+
+/* PDF selectable text layer */
 .pdf-text-layer {
   position: absolute;
   inset: 0;
@@ -1074,62 +632,399 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
   transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
 }
 .pdf-text-layer .markedContent { display: contents; }
-.pdf-text-layer ::selection {
-  background: rgba(71, 116, 91, .32);
-  color: transparent;
+.pdf-text-layer ::selection { background: rgba(61, 107, 79, 0.3); color: transparent; }
+
+/* ==========================================================================
+   Floating Bottom Navigation Dock (EPUB / AZW3 / PDF)
+   ========================================================================== */
+.reader-bottom-dock {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  border: 1px solid var(--r-border);
+  border-radius: 999px;
+  background: var(--r-surface);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--r-shadow);
 }
-.reader-viewport.is-translating .text-reader,
-.reader-viewport.is-translating .pdf-text-layer {
-  cursor: text;
+.reader-dock-btn {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--r-ink);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease;
+}
+.reader-dock-btn.icon-only { width: 34px; padding: 0; }
+.reader-dock-btn:hover:not(:disabled) {
+  background: var(--r-hover);
+  color: var(--r-accent);
+}
+.reader-dock-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.reader-dock-status {
+  min-width: 84px;
+  padding: 0 6px;
+  color: var(--r-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+.reader-dock-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--r-border);
+  margin: 0 2px;
 }
 
-/* Inline translation mode hint & floating popover */
+.pdf-page-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--r-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.pdf-page-jump input {
+  width: 46px;
+  height: 30px;
+  padding: 0 4px;
+  border: 1px solid var(--r-border);
+  border-radius: 8px;
+  background: var(--r-subtle);
+  color: var(--r-ink);
+  font-size: 12.5px;
+  text-align: center;
+  appearance: textfield;
+}
+.pdf-page-jump input::-webkit-outer-spin-button,
+.pdf-page-jump input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pdf-zoom-reset { min-width: 56px; font-variant-numeric: tabular-nums; }
+
+/* ==========================================================================
+   Popovers & Side Panels (Appearance, More Menu, Notes, Search, Shortcuts)
+   ========================================================================== */
+.reader-popover,
+.reader-annotations,
+.reader-search-panel,
+.reader-shortcuts-panel {
+  position: absolute;
+  z-index: 8;
+  top: 64px;
+  right: clamp(10px, 2vw, 24px);
+  border: 1px solid var(--r-border);
+  border-radius: 16px;
+  background: var(--r-surface-solid);
+  color: var(--r-ink);
+  box-shadow: var(--r-shadow);
+  animation: reader-ui-in 0.16s ease-out both;
+}
+
+/* Appearance Popover */
+.reader-appearance-popover {
+  width: min(300px, calc(100% - 20px));
+  padding: 14px;
+  display: grid;
+  gap: 14px;
+}
+.reader-popover-section { display: grid; gap: 8px; }
+.reader-popover-row { display: flex; align-items: center; justify-content: space-between; }
+.reader-popover-label { color: var(--r-muted); font-size: 12px; font-weight: 600; }
+.reader-font-value { color: var(--r-accent); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.reader-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.reader-theme-option {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 8px 6px;
+  border: 1.5px solid var(--r-border);
+  border-radius: 12px;
+  background: var(--r-subtle);
+  color: var(--r-ink);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.reader-theme-option.is-selected {
+  border-color: var(--r-accent);
+  background: var(--r-accent-soft);
+  color: var(--r-accent);
+  font-weight: 600;
+}
+.reader-theme-swatch {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  font: 600 13px/1 var(--serif);
+}
+
+.reader-font-stepper {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 6px;
+}
+.reader-font-stepper button {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--r-border);
+  border-radius: 10px;
+  background: var(--r-subtle);
+  color: var(--r-ink);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.reader-font-stepper button:hover:not(:disabled) {
+  border-color: var(--r-accent-border);
+  background: var(--r-hover);
+  color: var(--r-accent);
+}
+.reader-font-stepper button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* More Menu */
+.reader-more-menu {
+  width: min(260px, calc(100% - 20px));
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+}
+.reader-menu-item {
+  width: 100%;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--r-ink);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.reader-menu-item > span { flex: 1; }
+.reader-menu-item kbd {
+  padding: 2px 6px;
+  border: 1px solid var(--r-border);
+  border-radius: 5px;
+  background: var(--r-subtle);
+  color: var(--r-muted);
+  font-size: 11px;
+}
+.reader-menu-item:hover:not(:disabled) { background: var(--r-hover); color: var(--r-accent); }
+.reader-menu-item:disabled { opacity: 0.4; cursor: not-allowed; }
+.reader-menu-divider { height: 1px; margin: 4px 6px; background: var(--r-border); }
+
+/* Annotations, Search & Shortcuts Panels */
+.reader-annotations,
+.reader-search-panel,
+.reader-shortcuts-panel {
+  width: min(370px, calc(100% - 20px));
+  max-height: calc(100dvh - 84px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.reader-annotations-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--r-border);
+}
+.reader-annotations-header > div { display: grid; gap: 2px; }
+.reader-annotations-header strong { font-size: 14px; }
+.reader-annotations-header span { color: var(--r-muted); font-size: 11.5px; }
+
+.reader-annotation-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--r-muted);
+  cursor: pointer;
+}
+.reader-annotation-icon:hover { background: var(--r-hover); color: var(--r-accent); }
+.reader-annotation-icon.danger:hover { background: var(--r-danger-soft); color: var(--r-danger); }
+
+.reader-control {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 13px;
+  border: 1px solid var(--r-border);
+  border-radius: 10px;
+  background: var(--r-subtle);
+  color: var(--r-ink);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.reader-control:hover:not(:disabled) {
+  border-color: var(--r-accent-border);
+  background: var(--r-accent-soft);
+  color: var(--r-accent);
+}
+.reader-control:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.reader-note-form {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--r-border);
+}
+.reader-note-form label { color: var(--r-muted); font-size: 12px; font-weight: 600; }
+.reader-note-form textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 9px 11px;
+  border: 1px solid var(--r-border);
+  border-radius: 10px;
+  background: var(--r-subtle);
+  color: var(--r-ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.reader-note-form .reader-control { justify-self: end; }
+
+.reader-find-form { display: flex; align-items: center; gap: 7px; padding: 12px 14px; }
+.reader-find-input {
+  min-width: 0;
+  height: 38px;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--r-border);
+  border-radius: 10px;
+  background: var(--r-subtle);
+  color: var(--r-muted);
+}
+.reader-find-input input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--r-ink);
+  font-size: 13px;
+}
+.reader-find-message { margin: 0 14px 12px; color: var(--r-muted); font-size: 12.5px; line-height: 1.5; }
+.reader-annotation-error { margin: 0; color: var(--r-danger); font-size: 12px; }
+.reader-annotation-list { overflow-y: auto; padding: 6px 10px 12px; }
+.reader-annotation-empty { padding: 10px 6px; color: var(--r-muted); font-size: 12.5px; }
+.reader-annotation-item { display: flex; align-items: flex-start; gap: 4px; padding: 6px 0; border-bottom: 1px solid var(--r-border); }
+.reader-annotation-jump {
+  min-width: 0;
+  flex: 1;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.reader-annotation-jump:hover { background: var(--r-hover); }
+.reader-annotation-jump > span { display: flex; align-items: center; gap: 6px; color: var(--r-muted); font-size: 11.5px; }
+.reader-annotation-jump > strong { display: block; margin-top: 4px; font-size: 12.5px; }
+.reader-annotation-jump > p { overflow-wrap: anywhere; margin: 4px 0 0; color: var(--r-muted); font-size: 12.5px; line-height: 1.5; }
+
+.reader-shortcuts-list { margin: 0; padding: 10px 14px 14px; overflow-y: auto; display: grid; gap: 8px; }
+.reader-shortcuts-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 7px;
+  border-bottom: 1px dashed var(--r-border);
+  font-size: 12px;
+}
+.reader-shortcuts-list > div:last-child { padding-bottom: 0; border-bottom: 0; }
+.reader-shortcuts-list dt { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--r-muted); }
+.reader-shortcuts-list dd { margin: 0; text-align: right; }
+.reader-shortcuts-list kbd {
+  min-width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 6px;
+  border: 1px solid var(--r-border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--r-subtle);
+  color: var(--r-ink);
+  font: 600 11px/1 "DM Sans", monospace;
+}
+
+/* ==========================================================================
+   Inline Translation Mode & Floating Popover
+   ========================================================================== */
 .reader-translate-hint {
   position: fixed;
   z-index: 7;
   left: 50%;
-  bottom: max(16px, env(safe-area-inset-bottom));
+  bottom: max(62px, calc(env(safe-area-inset-bottom) + 54px));
   transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 10px 7px 13px;
-  border: 1px solid #c9dac4;
+  padding: 6px 8px 6px 13px;
+  border: 1px solid var(--r-accent-border);
   border-radius: 999px;
-  background: rgba(244, 249, 242, .96);
-  color: #2f553c;
-  box-shadow: 0 10px 28px rgba(34, 46, 35, .14);
-  font-size: 11.5px;
+  background: var(--r-accent-soft);
+  color: var(--r-accent);
+  box-shadow: var(--r-shadow-sm);
+  font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
   max-width: calc(100vw - 24px);
 }
-.reader-translate-hint > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.reader-translate-hint > span { overflow: hidden; text-overflow: ellipsis; }
 .reader-translate-hint button {
-  padding: 3px 9px;
-  border: 1px solid #c2d4bd;
+  padding: 3px 10px;
+  border: 1px solid var(--r-accent-border);
   border-radius: 99px;
-  background: #fff;
-  color: #315640;
-  font-size: 11px;
+  background: var(--r-surface-solid);
+  color: var(--r-accent);
+  font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
-}
-.reader-translate-hint button:hover {
-  background: #e9f1e6;
-}
-.reader-theme-dark .reader-translate-hint {
-  border-color: #4f634c;
-  background: rgba(34, 44, 35, .96);
-  color: #deebda;
-}
-.reader-theme-dark .reader-translate-hint button {
-  border-color: #556952;
-  background: #2b382c;
-  color: #e4efdf;
 }
 
 .translate-popover {
@@ -1139,22 +1034,12 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
   flex-direction: column;
   gap: 8px;
   padding: 12px 14px;
-  border: 1px solid #d5dfd1;
+  border: 1px solid var(--r-accent-border);
   border-radius: 15px;
-  background: #fffdf8;
-  color: #29362c;
-  box-shadow: 0 18px 46px rgba(24, 34, 25, .24);
-  animation: reader-ui-in .15s ease-out both;
-}
-.reader-theme-sepia .translate-popover {
-  border-color: #dccdb5;
-  background: #f9f2e4;
-  color: #43372b;
-}
-.reader-theme-dark .translate-popover {
-  border-color: #445143;
-  background: #232b24;
-  color: #e8ece2;
+  background: var(--r-surface-solid);
+  color: var(--r-ink);
+  box-shadow: var(--r-shadow);
+  animation: reader-ui-in 0.15s ease-out both;
 }
 .translate-popover-head {
   display: flex;
@@ -1162,23 +1047,17 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
   justify-content: space-between;
   gap: 8px;
   padding-bottom: 7px;
-  border-bottom: 1px solid #ece8de;
+  border-bottom: 1px solid var(--r-border);
 }
-.reader-theme-dark .translate-popover-head { border-bottom-color: #364036; }
 .translate-popover-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--green-dark);
-  font-size: 11.5px;
+  color: var(--r-accent);
+  font-size: 12px;
   font-weight: 700;
 }
-.reader-theme-dark .translate-popover-title { color: #a7c99f; }
-.translate-popover-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
+.translate-popover-actions { display: inline-flex; align-items: center; gap: 3px; }
 .translate-popover-actions button {
   width: 28px;
   height: 28px;
@@ -1187,55 +1066,165 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #8eb397; outli
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #5d6a5c;
+  color: var(--r-muted);
   cursor: pointer;
 }
-.translate-popover-actions button:hover:not(:disabled) {
-  background: #eef3ea;
-  color: var(--green-dark);
-}
-.reader-theme-dark .translate-popover-actions button { color: #b8c2b3; }
-.reader-theme-dark .translate-popover-actions button:hover:not(:disabled) {
-  background: #324032;
-  color: #e6f0e2;
-}
+.translate-popover-actions button:hover:not(:disabled) { background: var(--r-hover); color: var(--r-accent); }
 .translate-popover-source {
   margin: 0;
-  padding: 6px 9px;
-  border-left: 3px solid #9db797;
+  padding: 6px 10px;
+  border-left: 3px solid var(--r-accent);
   border-radius: 4px;
-  background: #f6f4ec;
-  color: #5e6a5d;
-  font-size: 11.5px;
+  background: var(--r-subtle);
+  color: var(--r-muted);
+  font-size: 12px;
   line-height: 1.45;
   max-height: 76px;
   overflow-y: auto;
 }
-.reader-theme-dark .translate-popover-source {
-  background: #1b221c;
-  color: #b4bdaf;
-}
 .translate-popover-result {
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.55;
   max-height: 160px;
   overflow-y: auto;
   overflow-wrap: anywhere;
 }
-.translate-popover-loading {
+.translate-popover-loading { display: inline-flex; align-items: center; gap: 7px; color: var(--r-muted); font-size: 12.5px; }
+.translate-popover-error { color: var(--r-danger); font-size: 12.5px; }
+.translate-popover-note { margin: 0; color: var(--r-muted); font-size: 11px; }
+
+/* ==========================================================================
+   States: Loading, Error, Offline, Toast
+   ========================================================================== */
+.reader-loading {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--r-page);
+  color: var(--r-muted);
+  font-size: 13.5px;
+}
+.reader-loading .spin, .spin { animation: spin 1s linear infinite; }
+.reader-loading .spin { color: var(--r-accent); }
+
+.reader-error {
+  width: min(480px, calc(100% - 32px));
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  padding: 28px;
+  border: 1px solid var(--r-border);
+  border-radius: 16px;
+  background: var(--r-surface-solid);
+  box-shadow: var(--r-shadow);
+  text-align: center;
+}
+.reader-error-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  background: var(--r-danger-soft);
+  color: var(--r-danger);
+  font: 600 20px var(--serif);
+}
+.reader-error h2 { margin: 0 0 8px; font: 600 19px var(--serif); }
+.reader-error p { margin: 0 0 18px; color: var(--r-muted); font-size: 13px; line-height: 1.6; }
+.reader-return-link {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  color: #6d786b;
-  font-size: 12px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 10px;
+  background: var(--r-accent);
+  color: #fff;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
 }
-.translate-popover-error {
-  color: #a64a3e;
-  font-size: 12px;
+
+.reader-offline-indicator { display: none; }
+
+.reader-toast {
+  position: fixed;
+  z-index: 15;
+  right: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  max-width: min(380px, calc(100% - 32px));
+  padding: 10px 14px;
+  border: 1px solid var(--r-border);
+  border-radius: 12px;
+  background: var(--r-surface-solid);
+  color: var(--r-ink);
+  box-shadow: var(--r-shadow);
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.reader-theme-dark .translate-popover-error { color: #e28d82; }
-.translate-popover-note {
-  margin: 0;
-  color: #858d81;
-  font-size: 10.5px;
+.reader-toast a { color: var(--r-accent); font-weight: 600; }
+
+/* ==========================================================================
+   Animations & Responsive Rules
+   ========================================================================== */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes reader-ui-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes progress-loading { from { transform: translateX(-40%); } to { transform: translateX(250%); } }
+@keyframes pdf-page-placeholder { to { background-position: -220% 0; } }
+
+@media (max-width: 899px) {
+  .hide-md { display: none; }
+  .reader-toc-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    border: 0;
+    padding: 0;
+    background: rgba(16, 22, 17, 0.36);
+    cursor: pointer;
+  }
+  .reader-toc-sidebar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 5;
+    width: min(300px, 84vw);
+    box-shadow: 12px 0 36px rgba(0, 0, 0, 0.22);
+  }
+}
+
+@media (max-width: 640px) {
+  .hide-sm { display: none; }
+  .reader-header {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 0 max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
+  }
+  .reader-pill-btn { width: 36px; padding: 0; }
+  .reader-book-heading strong { font-size: 13px; }
+  .reader-book-heading > span { font-size: 10.5px; }
+  .reader-bottom-dock { gap: 3px; padding: 4px 6px; }
+  .reader-dock-btn span { display: none; }
+  .reader-dock-btn { width: 36px; padding: 0; }
+  .pdf-zoom-reset span { display: inline; }
+  .pdf-zoom-reset { width: auto; padding: 0 8px; }
+  .epub-canvas, .text-reader { width: 100%; box-shadow: none; }
+  .pdf-page-stage { padding: 12px 8px 78px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
